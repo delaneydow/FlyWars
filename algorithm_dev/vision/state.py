@@ -1,4 +1,4 @@
-#state.py
+﻿#state.py
 
 #GOAL: BEHAVIOR CLASSIFICATION
 
@@ -6,9 +6,8 @@ import numpy as np
 
 # define functions
 def classify_state(track): 
-    vx = track.kf.statePost[2,0]
-    vy = track.kf.statePost[3,0]
-    speed = np.hypot(vx,vy)
+   
+    speed = track.speed() # gets speed from centroids
 
     # TODO MAY NEED TO ADJUST THRESHOLDS IF NECESSARY
     if speed < 0.5:
