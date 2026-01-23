@@ -1,4 +1,24 @@
-﻿# === HELPER FUNCTIONS ===
+﻿import cv2
+from track import Track
+
+# constants to access 
+THRESH_VAL = 12 # frame subtraction threshold
+MIN_AREA = 5 # minimum blob area (pixels)
+MAX_AREA = 3500 # max blob area (pixels)
+MAX_MISSED = 5 # allows tracks to survive 5 frames without a detection
+MAX_TRACK_DIST = 25 # max distance for track association (pixels), need to be a bit because the objects are falling / flying
+MAX_TRACKS = 20 # TODO tune this
+
+# ROI Configuration
+# define ROI as fractions of frame dimensions
+ROI_X_MIN = 0.5
+ROI_Y_MIN = 0.0
+
+# Precomputed morphology kernels (create once)
+kernel3 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3,3))
+kernel5 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5,5))
+
+# === HELPER FUNCTIONS ===
 def preprocess_and_crop(frame):
     """ accepts either Mono8 image (H,W) or color image (H, W, 3) 
         Returns grayscale ROI """ 
@@ -30,10 +50,12 @@ def preprocess_and_crop(frame):
 
 def detect_moving_objects_fast(prev_gray, curr_gray):
     diff = cv2.absdiff(curr_gray, prev_gray)
-    diff = cv2.GaussianBlur(diff, (5,5), 0)
+    diff = cv2.GaussianBlur(diff, (5,5), 0) 
     _, thresh = cv2.threshold(diff, THRESH_VAL, 255, cv2.THRESH_BINARY)
+    
+    
     # reuse kernel3, do NOT create a new one
-    thresh = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel3)
+    #thresh = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel3) #temp disable, keep closed only
     thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel5) #closing thresh
 
     num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(thresh)
@@ -41,9 +63,6 @@ def detect_moving_objects_fast(prev_gray, curr_gray):
     detections = []
     for i in range(1, num_labels):
         area = stats[i, cv2.CC_STAT_AREA]
-        areas = [stats[i, cv2.CC_STAT_AREA] for i in range(1, num_labels)]
-        if areas:
-            print("Largest area:", max(areas), "num blobs:", len(areas))
         if MIN_AREA <= area <= MAX_AREA:
             cx, cy = centroids[i]
             detections.append((int(cx), int(cy)))
@@ -111,8 +130,8 @@ def deduplicate_tracks(tracks, radius=15): #TODO FIX THIS TO IMPROVE DEDUPLICATI
     grid = {} # use spatial grid hasing / grid binning, duplicates only occur when tracks are close
     keep = []
 
-    # prefer older tracks
-    tracks = sorted(tracks, key=lambda t: t.last_seen, reverse=True)
+    # prefer tracks with fewer misses
+    tracks = sorted(tracks, key=lambda t: t.missed)
 
     for t in tracks: 
         x, y = t.last_position

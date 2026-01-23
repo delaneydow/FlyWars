@@ -17,47 +17,19 @@ from collections import deque
 import cProfile
 import pstats
 from camera_interface import Camera
+from track import Track
 from state import classify_state
 from tracking_helper import *
-from track import Track
 
 
 #constants
 VIDEO_PATH = "LUCID_TRI032S-M_251700592__20251114112116359_video3.avi" #path to AVI file
-DOWNSCALE = 1.0 #<1.0 to downscale frames for speed
-THRESH_VAL = 25 # frame subtraction threshold
-MIN_AREA = 5 # minimum blob area (pixels)
-MAX_AREA = 3500 # max blob area (pixels)
-MAX_MISSED = 5 # allows tracks to survive 5 frames without a detection
-MAX_TRACK_DIST = 10 # max distance for track association (pixels)
-HISTORY = 50 # frame to keep for plotting
-MAX_TRACKS = 20 # TODO tune this
 FRAME_CAP = 100 #only saves a select group of frames for quick validation
 REALTIME = True # disable visualization for real-time mode
 MAX_FRAMES = 1000 # save csv after 1000 frames for all experimental trials
-# ROI Configuration
-# define ROI as fractions of frame dimensions
-ROI_X_MIN = 0.5
-ROI_Y_MIN = 0.0
-
-# Precomputed morphology kernels (create once)
-kernel3 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3,3))
-kernel5 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5,5))
-
-# Precompute a small circle mask for radius 6
-CIRCLE_RADIUS = 20
-circle_mask = np.zeros((2*CIRCLE_RADIUS+1, 2*CIRCLE_RADIUS+1), dtype=np.uint8)
-cv2.circle(circle_mask, (CIRCLE_RADIUS, CIRCLE_RADIUS), CIRCLE_RADIUS, 255, -1)
 
 #visualization frames
 DRAW_EVERY = 3
-
-#kalman constants
-FPS = 60.0 # or read from video metadata
-DT = 1.0 / FPS
-
-
-
 
 
 # === MAIN PROCESSING LOOP ===
@@ -110,7 +82,19 @@ def process_video():
 
             #kalman calculations (tracking and state update)
             for t in tracks: 
-                if frame_idx %5 == 0: # only track every 5 frames to gauge velocity better
+                vx = t.kf.statePost[2, 0]
+                vy = t.kf.statePost[3, 0]
+                speed = t.speed()
+                print(
+                    f"Track {t.id}: "
+                    f"vx={vx:.2f}, vy={vy:.2f}, speed={t.speed():.2f}"
+                
+                 )
+                print(
+                    f"Track {t.id} raw state:",
+                    t.kf.statePost.ravel()
+                )
+                if frame_idx %3 == 0: # only track every 3 frames to gauge velocity better
                     track_states[t.id] = classify_state(t)
         
             # Visualization - only do for videos
@@ -168,9 +152,9 @@ def process_video():
 
        # save data frame
        df = pd.DataFrame(log)
-       df.to_csv("run_004_1.csv", index=False)
+       df.to_csv("run_005_1.csv", index=False)
 
-       print(f"[INFO] Saved {len(df)} frames to run_004_1.csv") 
+       print(f"[INFO] Saved {len(df)} frames to run_005_1.csv") 
     
     return latencies, det_counts, track_counts, frames, thresh_frames
         

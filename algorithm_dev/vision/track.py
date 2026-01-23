@@ -1,4 +1,13 @@
-﻿from collections import dequeue
+﻿from collections import deque
+import cv2
+import numpy as np
+
+# constants
+HISTORY = 50 # frame to keep for plotting
+
+#kalman constants
+FPS = 60.0 # or read from video metadata
+DT = 1.0 / FPS
 
 
 # === TRACKING CLASS ===
@@ -25,6 +34,7 @@ class Track:
             [1, 0, 0, 0],
             [0, 1, 0, 0]], dtype=np.float32)
 
+        self.kf.errorCovPost = np.eye(4, dtype=np.float32) * 10 #initialize velocity covariance
         self.kf.processNoiseCov = np.eye(4, dtype=np.float32) *1e-1
         self.kf.measurementNoiseCov = np.eye(2, dtype=np.float32) * 1e-0
 
@@ -33,14 +43,33 @@ class Track:
                                      [0],
                                      [0]], dtype=np.float32)
 
+        self.kf.statePost = np.array([
+                                    [centroid[0]],
+                                    [centroid[1]],
+                                    [0.0],
+                                    [0.0]
+                                ], dtype=np.float32)
+
     def predict(self): 
         pred = self.kf.predict()
         return pred[0,0], pred[1,0]
 
     def update(self, detection=None):
+        self.kf.predict() #ensure filter doesn't get stuck correcting a static state
         if detection is not None: 
             measured = np.array([[np.float32(detection[0])],
                                  [np.float32(detection[1])]])
+
+            # bootstrap on second detection so it actually triggers 
+            if len(self.centroids) == 2:
+                #dx = detection[0] - self.centroids[-1][0]
+                #dy = detection[1] - self.centroids[-1][1]
+                dx = self.centroids[-1][0] - self.centroids[-2][0]
+                dy = self.centroids[-1][1] - self.centroids[-2][1]
+                self.kf.statePost[2,0] = dx / DT
+                self.kf.statePost[3,0] = dy / DT
+
+
             self.kf.correct(measured)
             
             x = int(self.kf.statePost[0,0])
@@ -51,19 +80,13 @@ class Track:
         else: #no detection 
             self.centroids.append(self.centroids[-1])
             self.missed += 1
-        # initialize velocity using first two detections
-        if len(self.centroids) >= 2:
-            vx = self.centroids[-1][0] - self.centroids[-2][0]
-            vy = self.centroids[-1][1] - self.centroids[-2][1]
-            self.kf.statePre[2,0] = vx
-            self.kf.statePre[3,0] = vy
 
     def speed(self): 
-        if len(self.centroids) < 2:
-            return 0.0
-        dx = self.centroids[-1][0] - self.centroids[-2][0]
-        dy = self.centroids[-1][1] - self.centroids[-2][1]
-        return np.hypot(dx, dy)
+        # utilizes kalman velocity
+        vx = self.kf.statePost[2,0]
+        vy = self.kf.statePost[3,0]
+        return float(np.hypot(vx, vy))
+   
 
     @property
     def last_position(self): 
