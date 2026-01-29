@@ -41,6 +41,16 @@ def main():
     uv = np.asarray(mirror_uv)
     xy = np.asarray(beam_xy)
 
+    du = np.diff(uv[:,0])
+    dx = np.diff(xy[:,0])
+    dv = np.diff(uv[:,1])
+    dy = np.diff(xy[:,1])
+
+    if np.mean(np.sign(du) == np.sign(dx)) < 0.7: 
+        print ("Non-monotonic u --> x mapping")
+    if np.mean(np.sign(dv) == np.sign(dy)) < 0.7: 
+        print ("Non-monotonic v --> y mapping")
+
     corr_u_x = np.corrcoef(uv[:, 0], xy[:,0])[0,1]
     corr_v_y = np.corrcoef(uv[:,1], xy[:,1])[0,1]
 

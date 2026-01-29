@@ -74,37 +74,47 @@ def load_calibration(json_path, min_area, max_area):
 def estimate_spot_area(images): 
     areas = []
     EDGE_MARGIN = 5
+    PERCENTILES = [99.7, 99.5, 99.2, 99.0]
 
     for gray in images: 
-        blur = cv2.GaussianBlur(gray, (7,7), 0)
-
-        mask = cv2.adaptiveThreshold(
-            blur, 255, 
-            cv2.ADAPTIVE_THRESH_MEAN_C,
-            cv2.THRESH_BINARY_INV,
-            51, 5
-            )
-        kernel = np.ones((3,3), np.uint8)
-        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
-
-        num, labels, stats, centroids = cv2.connectedComponentsWithStats(mask)
-
         h, w = gray.shape
-        for i in range(1, num): 
-            area = stats[i, cv2.CC_STAT_AREA]
-            cx, cy = centroids[i]
+        blur = cv2.GaussianBlur(gray, (7,7), 0)
+        spot = None
 
-            # reject tiny noise
-            if area < 100: 
-                continue
+        # percentile ladder
+        for p in PERCENTILES: 
+            thresh_val = np.percentile(blur, p)
+            _, candidate = cv2.threshold(blur, thresh_val, 255, cv2.THRESH_BINARY)
 
-            # reject FOV edge
-            if cx < EDGE_MARGIN or cx > w-EDGE_MARGIN or cy < EDGE_MARGIN or cy > h-EDGE_MARGIN: 
-                continue
+            candidate = cv2.morphologyEx(
+                candidate, cv2.MORPH_OPEN, np.ones((3,3), np.uint8))
+            candidate = cv2.morphologyEx(
+                candidate, cv2.MORPH_CLOSE, np.ones((5,5), np.uint8))
 
-            areas.append(area)
+            num, labels, stats, _ = cv2.connectedComponentsWithStats(candidate)
 
-        
+            # pick best laser-like blob
+            best = None
+
+            for i in range(1, num): 
+                area = stats[i, cv2.CC_STAT_AREA]
+                cx, cy, w0, h0, _ = stats[i]
+
+                # reject tiny noise
+                if area < 100: 
+                    continue
+
+                # reject FOV edge
+                if cx < EDGE_MARGIN or cx > w-EDGE_MARGIN or cy < EDGE_MARGIN or cy > h-EDGE_MARGIN: 
+                    continue
+
+                best=area
+                break
+
+            if best is not None:
+                areas.append(best)
+                break # stop percetile ladder
+
     return np.asarray(areas)
 
 def load_all_calibration_images(json_path):
@@ -129,59 +139,66 @@ def load_all_calibration_images(json_path):
 
 def extract_laser_centroid(gray, min_area, max_area):
     h, w = gray.shape
-
     blur = cv2.GaussianBlur(gray, (5,5), 0)
 
-    # --- KEY FIX: percentile-based threshold ---
-    thresh_val = np.percentile(blur, 99.7)  # laser lives here
-    _, spot = cv2.threshold(
-        blur, thresh_val, 255, cv2.THRESH_BINARY
-    )
+    PERCENTILES = [99.7, 99.5, 99.2, 99.0]
+    EDGE_MARGIN = 20
 
-    spot = spot.astype(np.uint8)
+    for p in PERCENTILES:
+        thresh_val = np.percentile(blur, p)
+        _, spot = cv2.threshold(blur, thresh_val, 255, cv2.THRESH_BINARY)
 
-    # clean up
-    spot = cv2.morphologyEx(spot, cv2.MORPH_OPEN, np.ones((3,3), np.uint8))
-    spot = cv2.morphologyEx(spot, cv2.MORPH_CLOSE, np.ones((5,5), np.uint8))
+        spot = cv2.morphologyEx(
+            spot, cv2.MORPH_OPEN, np.ones((3,3), np.uint8)
+        )
+        spot = cv2.morphologyEx(
+            spot, cv2.MORPH_CLOSE, np.ones((5,5), np.uint8)
+        )
 
-    num, labels, stats, _ = cv2.connectedComponentsWithStats(spot)
+        num, labels, stats, _ = cv2.connectedComponentsWithStats(spot)
 
-    best = None
-    best_score = -1
+        best = None
+        best_score = -1
 
-    for i in range(1, num):
-        area = stats[i, cv2.CC_STAT_AREA]
+        for i in range(1, num):
+            area = stats[i, cv2.CC_STAT_AREA]
+            x, y, w0, h0, _ = stats[i]
 
-        # area sanity
-        if area < min_area or area > max_area:
-            continue
+            # --- area sanity ---
+            if area < min_area or area > max_area:
+                continue
 
-        x, y, w0, h0, _ = stats[i]
+            # --- edge rejection ---
+            if x < EDGE_MARGIN or y < EDGE_MARGIN or \
+               x+w0 > w-EDGE_MARGIN or y+h0 > h-EDGE_MARGIN:
+                continue
 
-        # edge rejection
-        if x < 20 or y < 20 or x+w0 > w-20 or y+h0 > h-20:
-            continue
+            # --- shape sanity (laser ≈ round-ish) ---
+            aspect = w0 / max(h0, 1)
+            if aspect < 0.5 or aspect > 2.0:
+                continue
 
-        mask = (labels == i)
-        intensity = gray[mask].astype(np.float32)
+            mask = (labels == i)
+            intensity = gray[mask].astype(np.float32)
 
-        # laser = bright AND compact
-        score = intensity.mean() * area
+            # bright AND compact
+            score = intensity.mean() * area
 
-        if score > best_score:
-            best = mask
-            best_score = score
+            if score > best_score:
+                best = mask
+                best_score = score
 
-    if best is None:
-        raise RuntimeError("No valid laser spot found")
+        if best is not None:
+            ys, xs = np.where(best)
+            weights = gray[ys, xs].astype(np.float32)
 
-    ys, xs = np.where(best)
-    weights = gray[ys, xs].astype(np.float32)
+            cx = np.sum(xs * weights) / np.sum(weights)
+            cy = np.sum(ys * weights) / np.sum(weights)
 
-    cx = np.sum(xs * weights) / np.sum(weights)
-    cy = np.sum(ys * weights) / np.sum(weights)
+            return float(cx), float(cy)
 
-    return float(cx), float(cy)
+    raise RuntimeError("No valid laser spot found")
+
 
 
 
