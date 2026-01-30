@@ -4,6 +4,8 @@ import cv2
 import numpy as np
 from mirror_camera_mapping import load_calibration, load_all_calibration_images, estimate_spot_area
 from pathlib import Path
+from sklearn.linear_model import RANSACRegressor
+from sklearn.linear_model import LinearRegression
 
 def main(): 
     here = Path(__file__).resolve().parent
@@ -40,6 +42,19 @@ def main():
 
     uv = np.asarray(mirror_uv)
     xy = np.asarray(beam_xy)
+
+    model_x = RANSACRegressor(
+        LinearRegression(), 
+        min_samples=0.7,
+        residual_threshold=30.0)
+
+    model_y = RANSACRegressor(
+        LinearRegression(),
+        min_samples=0.7,
+        residual_threshold=30.0)
+
+    model_x.fit(uv, xy[:,0])
+    model_y.fit(uv, xy[:,1])
 
     du = np.diff(uv[:,0])
     dx = np.diff(xy[:,0])

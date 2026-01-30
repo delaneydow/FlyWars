@@ -12,6 +12,7 @@ from pathlib import Path
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.linear_model import Ridge
 from sklearn.pipeline import Pipeline 
+from sklearn.linear_model import RANSACRegressor
 
 
 def validate_resolution(img, meta): 
@@ -55,7 +56,10 @@ def load_calibration(json_path, min_area, max_area):
           #  continue
 
         try: 
-            x, y = extract_laser_centroid(img, min_area, max_area)
+            x, y = extract_laser_centroid(
+                img, min_area, max_area,
+               mirror_uv=(s["u"], s["v"]))
+            prev_xy = (x, y)
         except RuntimeError as e: 
             print(f"Skipping frame {s['image']}: {e}")
             continue
@@ -137,8 +141,22 @@ def load_all_calibration_images(json_path):
 
     return images, data
 
-def extract_laser_centroid(gray, min_area, max_area):
+def extract_laser_centroid(gray, min_area, max_area, mirror_uv=None):
     h, w = gray.shape
+    expected = None
+    if mirror_uv is not None: 
+        u, v = mirror_uv
+
+        # normalize mirror coords --> [1,1]
+        # assumes roughly symmetric scan
+        u_norm = np.clip(u/0.2, -1, 1)
+        v_norm = np.clip(u/0.2, -1, 1)
+
+        # map to image space
+        ex = (u_norm + 1) * 0.5 * w
+        ey = (1-(v_norm +1) * 0.5) * h # flip y
+        
+        expected = np.array([ex, ey], dtype=np.float32)
     blur = cv2.GaussianBlur(gray, (5,5), 0)
 
     PERCENTILES = [99.7, 99.5, 99.2, 99.0]
@@ -178,11 +196,19 @@ def extract_laser_centroid(gray, min_area, max_area):
             if aspect < 0.5 or aspect > 2.0:
                 continue
 
+            bbox_area = w0 * h0
+            fill_ratio = area / max(bbox_area, 1)
+            if fill_ratio < 0.25: 
+                continue
+
+
             mask = (labels == i)
             intensity = gray[mask].astype(np.float32)
+            peak = intensity.mean() # previusly intensity.mean()
 
             # bright AND compact
-            score = intensity.mean() * area
+            score = peak * area 
+
 
             if score > best_score:
                 best = mask
@@ -200,63 +226,12 @@ def extract_laser_centroid(gray, min_area, max_area):
     raise RuntimeError("No valid laser spot found")
 
 
-
-
-def extract_laser_centroid_diff(gray, reference):
-    # Absolute difference
-    diff = cv2.absdiff(gray, reference)
-
-    # Normalize
-    #diff = cv2.normalize(diff, None, 0, 255, cv2.NORM_MINMAX)
-
-    # suppress background 
-    diff = cv2.GaussianBlur(diff, (5,5), 0)
-
-    # Threshold changed pixels
-    thresh = np.percentile(diff, 99.5)
-    _, mask = cv2.threshold(diff, 0, 255,
-                             cv2.THRESH_BINARY)
-    mask = mask.astype(np.uint8)
-
-    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((3,3), np.uint8))
-
-    if np.count_nonzero(mask) < 30:
-        raise RuntimeError("No moving laser spot detected")
-
-    # Distance transform
-    dist = cv2.distanceTransform(mask, cv2.DIST_L2, 5)
-    _, _, _, (cx, cy) = cv2.minMaxLoc(dist)
-
-    return float(cx), float(cy)
-
-
-
 def debug_centroid(gray): 
    x, y = extract_laser_centroid(gray, min_area, max_area)
    vis = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
    cv2.circle(vis, (int(x), int(y)), 8, (0,0,255), 2)
 
    return vis
-
-def fit_poly(mirror_uv, beam_xy, degree = 3): 
-    """ fit mirror --> image mapping using third order polynomial to start
-    due to beamsplitter, mirror, perspective, inversion don't necessarily want 
-    to use an affine filter 
-
-    input: mirror uv coordinates, beam xy coordinates, degree of polynomial
-    output: models 
-    """ 
-    models = []
-
-    for dim in range(2): 
-        model = Pipeline([
-            ("poly", PolynomialFeatures(degree)), 
-            ("ridge", Ridge(alpha=1e-3))
-            ])
-        model.fit(mirror_uv, beam_xy[:, dim])
-        models.append(model)
-
-    return models 
 
 def show_full_image(title, img, max_size=900):
     h, w = img.shape[:2]
@@ -279,4 +254,24 @@ def mirror_to_image(u,v):
         model_x.predict(uv)[0], 
         model_y.predict(uv)[0]
      )
+
+def fit_poly(mirror_uv, beam_xy, degree = 3): 
+    """ fit mirror --> image mapping using third order polynomial to start
+    due to beamsplitter, mirror, perspective, inversion don't necessarily want 
+    to use an affine filter 
+
+    input: mirror uv coordinates, beam xy coordinates, degree of polynomial
+    output: models 
+    """ 
+    models = []
+
+    for dim in range(2): 
+        model = Pipeline([
+            ("poly", PolynomialFeatures(degree)), 
+            ("ridge", Ridge(alpha=1e-3))
+            ])
+        model.fit(mirror_uv, beam_xy[:, dim])
+        models.append(model)
+
+    return models 
 
