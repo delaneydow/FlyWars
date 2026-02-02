@@ -45,17 +45,26 @@ def load_calibration(json_path, min_area, max_area):
     # sort samples by mirror motion
     samples = data["samples"]
     samples = sorted(samples, key=lambda s: (s["u"], s["v"]))
+    
+
 
     for s in samples: 
         img_path = base_dir / s["image"]
         img = cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE)
+        print(f"Looking at {s['image']}")
         validate_resolution(img, data) # enforce consistency at load time
+
+        if abs(s["u"]) < 0.02 and abs(s["v"]) < 0.02:
+            center_reference = np.array([x, y]) #distance conditioned spatial prior
+
         if img is None: 
             raise FileNotFoundError(s["image"])
         try: 
             x, y, roi = extract_laser_centroid(
                 img, min_area, max_area,
-               mirror_uv=(s["u"], s["v"]))
+               mirror_uv=(s["u"], s["v"]), 
+               image_name=s["image"],
+                prev_xy=prev_xy if "prev_xy" in locals() else None)
             prev_xy = (x, y)
         except RuntimeError as e: 
             print(f"Skipping frame {s['image']}: {e}")
@@ -65,6 +74,7 @@ def load_calibration(json_path, min_area, max_area):
 
         mirror_uv.append([s["u"], s["v"]]) #shape: (N,2)
         beam_xy.append([x,y]) # shape (N, 2)
+
 
     return (
         np.asarray(mirror_uv, dtype=np.float32), 
@@ -138,7 +148,7 @@ def load_all_calibration_images(json_path):
 
     return images, data
 
-def extract_laser_centroid(gray, min_area, max_area, mirror_uv=None):
+def extract_laser_centroid(gray, min_area, max_area, mirror_uv=None, image_name=None, prev_xy=None):
     h, w = gray.shape
     expected = None
     roi = None
@@ -148,6 +158,10 @@ def extract_laser_centroid(gray, min_area, max_area, mirror_uv=None):
             mirror_uv_to_image_xy(u, v, w, h), 
             dtype=np.float32) 
         roi = mirror_uv_to_roi(u, v, w, h)
+    is_far = False
+    if image_name is not None and "_2.00" in image_name:
+        is_far = True
+
 
     debug_roi_overlay(gray, roi, expected, u, v) # call before thresholding 
 
@@ -157,7 +171,14 @@ def extract_laser_centroid(gray, min_area, max_area, mirror_uv=None):
     EDGE_MARGIN = 20
 
     for p in PERCENTILES:
-        thresh_val = np.percentile(blur, p)
+        if roi is not None: # if roi exists, compute local thresholding
+            x0, y0, x1, y1 = roi 
+            roi_vals = blur[y0:y1, x0:x1]
+            if roi_vals.size ==0: 
+                continue
+            thresh_val = np.percentile(roi_vals, p)
+        else: 
+            thresh_val = np.percentile(blur,p) #global threshold as default
         _, spot = cv2.threshold(blur, thresh_val, 255, cv2.THRESH_BINARY)
 
         spot = cv2.morphologyEx(
@@ -168,6 +189,8 @@ def extract_laser_centroid(gray, min_area, max_area, mirror_uv=None):
         )
 
         num, labels, stats, _ = cv2.connectedComponentsWithStats(spot)
+        # blob merging if applicable
+        candidates = []
 
         best = None
         best_score = -1
@@ -176,8 +199,12 @@ def extract_laser_centroid(gray, min_area, max_area, mirror_uv=None):
             area = stats[i, cv2.CC_STAT_AREA]
             x, y, w0, h0, _ = stats[i]
 
+            # compute explicit roundness
+            perimeter = 2 * (w0 + h0)
+            circularity = 4 * np.pi * area / max(perimeter * perimeter, 1)
+
             # --- area sanity ---
-            if area < min_area or area > max_area:
+            if area < min_area*0.5 or area > max_area: #0.5 as fudge factor to allow merging ROIs
                 continue
 
             # --- edge rejection ---
@@ -199,7 +226,8 @@ def extract_laser_centroid(gray, min_area, max_area, mirror_uv=None):
             mask = (labels == i)
             ys, xs = np.where(mask) #suspected x and y vals
 
-            intensity = gray[mask].astype(np.float32)
+            #intensity = gray[mask].astype(np.float32)
+            intensity = gray[ys, xs].astype(np.float32)
             peak = intensity.mean() # look at max or average 
 
             # --- compute centroid for this particular candidate
@@ -213,7 +241,18 @@ def extract_laser_centroid(gray, min_area, max_area, mirror_uv=None):
                 rx0, ry0, rx1, ry1 = roi
                 if not (rx0 <= cx <= rx1 and ry0 <= cy <= ry1): 
                     continue
+            if is_far and roi is not None: #tighten roi for far-field 
+                rx0, ry0, rx1, ry1 = roi
+                shrink_x = int(0.15 * (rx1 - rx0))
+                shrink_y = int(0.15 * (ry1 - ry0))
+                roi = (
+                    rx0 + shrink_x,
+                    ry0 + shrink_y,
+                    rx1 - shrink_x,
+                    ry1 - shrink_y
+                )
 
+            candidates.append((mask, cx, cy, area)) # if passes then append to candidates
             # --- compare to spatial prior (soft limit) ---
             if expected is not None: 
                 dist = np.hypot(cx - expected[0], cy - expected[1])
@@ -221,14 +260,52 @@ def extract_laser_centroid(gray, min_area, max_area, mirror_uv=None):
             else: 
                 spatial_weight = 1.0
 
+            # compute spatial consistency compared to predecessor (close distance)
+            if prev_xy is not None:
+                dist_prev = np.hypot(cx - prev_xy[0], cy - prev_xy[1])
+                consistency_weight = np.exp(-dist_prev / 120.0)
+            else:
+                consistency_weight = 1.0
+
+
+
+            MERGE_DIST = 50 # num. of pixels, may need to tune
+            used = set()
+            merged_masks=[]
+
+            for i, (mask_i, cx_i, cy_i, area_i) in enumerate(candidates): 
+                if i in used: 
+                    continue
+                merged = mask_i.copy()
+                total_area = area_i
+                used.add(i)
+
+                for j, (mask_j, cx_j, cy_j, area_j) in enumerate(candidates): 
+                    if j in used: 
+                        continue
+                    if np.hypot(cx_i - cx_j, cy_i - cy_j) < MERGE_DIST:
+                        merged |= mask_j
+                        total_area += area_j
+                        used.add(j)
+                merged_masks.append((merged, total_area))
+
             # final score computation (including spatial weight)
-            score = peak * area * spatial_weight
+            #score = peak * area * spatial_weight
+
+            if is_far: # far-field, trust geometry + consistency rather than brightness
+                score = (
+                    area * (circularity**2) * consistency_weight * spatial_weight)
+            else: # brightness is more helpful at close distance
+                #score = (  area * spatial_weight *consistency_weight * np.exp(-abs(aspect - 1.0)))   # favor round shaped centroids
+                score = ( area*np.log1p(peak)*spatial_weight)
+
             # temp debugging --> score output
             print(f"p={p} area={area:.0f} peak={peak:.1f} dist={dist:.1f} score={score:.1e}")
             print(f"---------------------------------------------------------")
 
             if score > best_score:
-                best = mask
+                #best = mask
+                best=max(merged_masks, key=lambda m: m[1])[0]
                 best_score = score
 
         if best is not None:

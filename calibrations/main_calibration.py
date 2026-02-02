@@ -72,6 +72,15 @@ def main():
     print("corr(u, x):", corr_u_x)
     print("corr(v, y):", corr_v_y)
 
+    # calibration sanity check
+    print("RMS reprojection error:",
+      np.mean(np.linalg.norm(
+          beam_xy - np.column_stack([
+              model_x.predict(mirror_uv),
+              model_y.predict(mirror_uv)
+          ]),
+          axis=1
+      )))
 
     # sanity plots
     for (x,y) in beam_xy[:5]: 
