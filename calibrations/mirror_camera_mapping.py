@@ -13,6 +13,7 @@ from sklearn.preprocessing import PolynomialFeatures
 from sklearn.linear_model import Ridge
 from sklearn.pipeline import Pipeline 
 from sklearn.linear_model import RANSACRegressor
+from scipy.interpolate import Rbf
 
 UV_DEADBAND = 0.03   # mirror units (~3–5% of range is typical)
 CENTER_EXPAND = 0.15  # fraction of image to allow around center
@@ -31,7 +32,7 @@ def validate_resolution(img, meta):
             f"json={expected_w}x{expected_h}"
             )
 
-def load_calibration(json_path, min_area, max_area):
+def load_calibration(json_path):
     json_path = Path(json_path).resolve()
     base_dir = json_path.parent
 
@@ -49,29 +50,24 @@ def load_calibration(json_path, min_area, max_area):
 
 
     for s in samples: 
+        if "centroid" not in s:
+            raise ValueError(f"Missing centroid for {s['image']}")
+        
         img_path = base_dir / s["image"]
         img = cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE)
         print(f"Looking at {s['image']}")
-        validate_resolution(img, data) # enforce consistency at load time
-
-        if abs(s["u"]) < 0.02 and abs(s["v"]) < 0.02:
-            center_reference = np.array([x, y]) #distance conditioned spatial prior
-
+       
         if img is None: 
             raise FileNotFoundError(s["image"])
-        try: 
-            x, y, roi = extract_laser_centroid(
-                img, min_area, max_area,
-               mirror_uv=(s["u"], s["v"]), 
-               image_name=s["image"],
-                prev_xy=prev_xy if "prev_xy" in locals() else None)
-            prev_xy = (x, y)
-        except RuntimeError as e: 
-            print(f"Skipping frame {s['image']}: {e}")
-            continue
+        
+        validate_resolution(img, data) # enforce consistency at load time
 
-        debug_centroid_overlay(img, x, y, roi=roi) # visual centroid overlay check
+        x, y = map(float, s["centroid"])
+        #x, y, roi = extract_laser_centroid(img, min_area, max_area, mirror_uv=(s["u"], s["v"]), image_name=s["image"],prev_xy=prev_xy if "prev_xy" in locals() else None) prev_xy = (x, y)
+        
+        #debug_centroid_overlay(img, x, y, roi=roi) # visual centroid overlay check
 
+       
         mirror_uv.append([s["u"], s["v"]]) #shape: (N,2)
         beam_xy.append([x,y]) # shape (N, 2)
 
@@ -81,6 +77,9 @@ def load_calibration(json_path, min_area, max_area):
         np.asarray(beam_xy, dtype=np.float32),
         data # data = metadata for later use
         )
+
+def predict_xy(u, v):
+    return fx(u, v), fy(u, v)
 
 def estimate_spot_area(images): 
     areas = []
@@ -152,6 +151,8 @@ def extract_laser_centroid(gray, min_area, max_area, mirror_uv=None, image_name=
     h, w = gray.shape
     expected = None
     roi = None
+    roi_fixed = roi # freeze forever
+    roi_mask = None
     if mirror_uv is not None: 
         u, v = mirror_uv
         expected = np.array(
@@ -161,6 +162,10 @@ def extract_laser_centroid(gray, min_area, max_area, mirror_uv=None, image_name=
     is_far = False
     if image_name is not None and "_2.00" in image_name:
         is_far = True
+    if roi_fixed is not None: 
+        roi_mask = np.zeros_like(gray, dtype=np.uint8)
+        x0, y0, x1, y1 = roi_fixed
+        roi_mask[y0:y1, x0:x1] = 255
 
 
     debug_roi_overlay(gray, roi, expected, u, v) # call before thresholding 
@@ -179,7 +184,9 @@ def extract_laser_centroid(gray, min_area, max_area, mirror_uv=None, image_name=
             thresh_val = np.percentile(roi_vals, p)
         else: 
             thresh_val = np.percentile(blur,p) #global threshold as default
-        _, spot = cv2.threshold(blur, thresh_val, 255, cv2.THRESH_BINARY)
+        _, spot = cv2.threshold(blur, thresh_val, 255, cv2.THRESH_BINARY) 
+        if roi_mask is not None: #apply threshold only inside ROI
+            spot &= roi_mask
 
         spot = cv2.morphologyEx(
             spot, cv2.MORPH_OPEN, np.ones((3,3), np.uint8)
@@ -241,16 +248,6 @@ def extract_laser_centroid(gray, min_area, max_area, mirror_uv=None, image_name=
                 rx0, ry0, rx1, ry1 = roi
                 if not (rx0 <= cx <= rx1 and ry0 <= cy <= ry1): 
                     continue
-            if is_far and roi is not None: #tighten roi for far-field 
-                rx0, ry0, rx1, ry1 = roi
-                shrink_x = int(0.15 * (rx1 - rx0))
-                shrink_y = int(0.15 * (ry1 - ry0))
-                roi = (
-                    rx0 + shrink_x,
-                    ry0 + shrink_y,
-                    rx1 - shrink_x,
-                    ry1 - shrink_y
-                )
 
             candidates.append((mask, cx, cy, area)) # if passes then append to candidates
             # --- compare to spatial prior (soft limit) ---
@@ -314,6 +311,12 @@ def extract_laser_centroid(gray, min_area, max_area, mirror_uv=None, image_name=
 
             cx = np.sum(xs * weights) / np.sum(weights)
             cy = np.sum(ys * weights) / np.sum(weights)
+
+            # enforce roi on final centroid 
+            if roi_fixed is not None: 
+                rx0, ry0, rx1, ry1 = roi_fixed
+                if not (rx0 <= cx <= rx1 and ry0 <= cy <= ry1): 
+                    continue # try next percentile 
 
             return float(cx), float(cy), roi
 
