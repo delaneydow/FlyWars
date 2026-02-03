@@ -11,7 +11,11 @@ import numpy as np
 
 ENGAGE_RADIUS = 120       # px from laser center
 MIN_SPEED = 2.0           # px/frame
-PREDICT_HORIZON = 5       # frames
+
+# predict horizon tied to latency 
+FRAME_DT = 1/120.0 # seconds per frame
+SYSTEM_LATENCY = 0.045 #TODO tweak this value!!!
+PREDICT_HORIZON = int(SYSTEM_LATENCY/FRAME_DT)
 UNCERTAINTY_PENALTY = 0.5 
 
 # function definitions
@@ -44,7 +48,7 @@ def score_track(track, state, laser_origin):
     distance = np.linalg.norm(prediction - laser_origin)
 
     # if distance is outside of engage radius i.e. not within range 
-    if dist > ENGAGE_RADIUS: 
+    if distance > ENGAGE_RADIUS: 
         return 0.0
 
 
@@ -59,6 +63,6 @@ def score_track(track, state, laser_origin):
     cov = track.kf.errorCovPost
     uncertainty = cov[0,0] + cov[1,1]
 
-    score = (state_weight * speed / (1.0 + dist * 0.05) * np.exp(-UNCERTAINTY_PENALTY * uncertainty))
+    score = (state_weight * speed / (1.0 + distance * 0.05) * np.exp(-UNCERTAINTY_PENALTY * uncertainty))
     
     return float(score)
