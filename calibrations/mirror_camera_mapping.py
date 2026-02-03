@@ -78,9 +78,6 @@ def load_calibration(json_path):
         data # data = metadata for later use
         )
 
-def predict_xy(u, v):
-    return fx(u, v), fy(u, v)
-
 def estimate_spot_area(images): 
     areas = []
     EDGE_MARGIN = 5
