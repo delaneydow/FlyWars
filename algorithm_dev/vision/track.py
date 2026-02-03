@@ -18,7 +18,8 @@ class Track:
         self.centroids = deque(maxlen=HISTORY)
         self.centroids.append(centroid)
         self.missed = 0 # num of consecutive frames w/o detection
-        self.last_seen = 1 # num. of frames since last scene aka how old 
+        #self.last_seen = 1 # num. of frames since last scene aka how old 
+        self.last_seen = 0
 
         # ADD KALMAN STATE
         # using initial vector [x, y, vx, vy]T
@@ -62,10 +63,10 @@ class Track:
 
             # bootstrap on second detection so it actually triggers 
             if len(self.centroids) == 2:
-                #dx = detection[0] - self.centroids[-1][0]
-                #dy = detection[1] - self.centroids[-1][1]
-                dx = self.centroids[-1][0] - self.centroids[-2][0]
-                dy = self.centroids[-1][1] - self.centroids[-2][1]
+                dx = detection[0] - self.centroids[-1][0]
+                dy = detection[1] - self.centroids[-1][1]
+                #dx = self.centroids[-1][0] - self.centroids[-2][0]
+                #dy = self.centroids[-1][1] - self.centroids[-2][1]
                 self.kf.statePost[2,0] = dx / DT
                 self.kf.statePost[3,0] = dy / DT
 
@@ -80,12 +81,14 @@ class Track:
         else: #no detection 
             self.centroids.append(self.centroids[-1])
             self.missed += 1
+            self.last_seen +=1 #needs to also increment when missed
 
     def speed(self): 
         # utilizes kalman velocity
         vx = self.kf.statePost[2,0]
         vy = self.kf.statePost[3,0]
         return float(np.hypot(vx, vy))
+    
    
 
     @property
