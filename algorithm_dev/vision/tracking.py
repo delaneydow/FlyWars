@@ -31,7 +31,6 @@ MAX_FRAMES = 1000 # save csv after 1000 frames for all experimental trials
 #visualization frames
 DRAW_EVERY = 3
 
-
 # === MAIN PROCESSING LOOP ===
 
 def process_video(): 
@@ -41,7 +40,7 @@ def process_video():
     # instantiate empty arrays for tracking and latency calculations
     next_track_id = 0 
     #explicit multi-target capacity metrics
-    tracks, log, latencies, det_counts, track_counts, frames, thresh_frames = [], [], [], [], [], [], []
+    tracks, log, track_log, latencies, det_counts, track_counts, frames, thresh_frames = [], [], [], [], [], [], [], []
     # kalman state factoring   
     track_states = {}
     frame_idx = 0
@@ -80,11 +79,15 @@ def process_video():
             tracks = deduplicate_tracks(tracks) # one track per fly, protect stationary leak
             t_tracking = time.perf_counter() - start
 
+            now = time.time()
             #kalman calculations (tracking and state update)
             for t in tracks: 
-                vx = t.kf.statePost[2, 0]
-                vy = t.kf.statePost[3, 0]
+                x, y, vx, vy = t.kf.statePost[:,0] #consolidate state calls
+                cov = t.kf.errorCovPost
+                #vx = t.kf.statePost[2, 0]
+                #vy = t.kf.statePost[3, 0]
                 speed = t.speed()
+                
                 print(
                     f"Track {t.id}: "
                     f"vx={vx:.2f}, vy={vy:.2f}, speed={t.speed():.2f}"
@@ -141,6 +144,21 @@ def process_video():
                 "max_speed": max(
                     (t.speed() for t in tracks),default=0)
             })
+
+            track_log.append({
+                "frame": frame_idx,
+                "time": now, 
+                "track_id": t.id,
+                "x": float(x),
+                "y": float(y),
+                "vx": float(vx), 
+                "vy": float(vy),
+                "speed": float(speed),
+                "state": track_states.get(t.id, "unknown"),
+                "cov_xx": float(cov[0,0]),
+                "cov_yy": float(cov[1,1]),
+            })
+
             if cv2.waitKey(1) & 0xFF == 27:  # ESC
                 print("[INFO] ESC pressed — stopping")
                 break
@@ -155,6 +173,11 @@ def process_video():
        df.to_csv("run_005_1.csv", index=False)
 
        print(f"[INFO] Saved {len(df)} frames to run_005_1.csv") 
+
+       df_tracks=pd.DataFrame(track_log) # save individual tracking information
+       df_tracks.to_csv("run_005_1_tracks.csv", index=False)
+
+       print(f"[INFO] Saved {len(df_tracks)} track states")
     
     return latencies, det_counts, track_counts, frames, thresh_frames
         
