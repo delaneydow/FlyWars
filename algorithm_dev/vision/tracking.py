@@ -40,7 +40,7 @@ def process_video():
     # instantiate empty arrays for tracking and latency calculations
     next_track_id = 0 
     #explicit multi-target capacity metrics
-    tracks, log, track_log, latencies, det_counts, track_counts, frames, thresh_frames = [], [], [], [], [], [], [], []
+    tracks, log_frames, track_log, latencies, det_counts, track_counts, frames, thresh_frames = [], [], [], [], [], [], [], []
     # kalman state factoring   
     track_states = {}
     frame_idx = 0
@@ -99,6 +99,20 @@ def process_video():
                 )
                 if frame_idx %3 == 0: # only track every 3 frames to gauge velocity better
                     track_states[t.id] = classify_state(t)
+
+                track_log.append({
+                    "frame": frame_idx,
+                    "time": now, 
+                    "track_id": t.id,
+                    "x": float(x),
+                    "y": float(y),
+                    "vx": float(vx), 
+                    "vy": float(vy),
+                    "speed": float(speed),
+                    "state": track_states.get(t.id, "unknown"),
+                    "cov_xx": float(cov[0,0]),
+                    "cov_yy": float(cov[1,1]),
+                })
         
             # Visualization - only do for videos
             if not REALTIME: 
@@ -135,7 +149,7 @@ def process_video():
             track_counts.append(len(tracks))
 
              # log results
-            log.append({
+            log_frames.append({
                 "frame": frame_idx,
                 "time": time.time(),
                 "detections": len(detections),
@@ -145,19 +159,6 @@ def process_video():
                     (t.speed() for t in tracks),default=0)
             })
 
-            track_log.append({
-                "frame": frame_idx,
-                "time": now, 
-                "track_id": t.id,
-                "x": float(x),
-                "y": float(y),
-                "vx": float(vx), 
-                "vy": float(vy),
-                "speed": float(speed),
-                "state": track_states.get(t.id, "unknown"),
-                "cov_xx": float(cov[0,0]),
-                "cov_yy": float(cov[1,1]),
-            })
 
             if cv2.waitKey(1) & 0xFF == 27:  # ESC
                 print("[INFO] ESC pressed — stopping")
@@ -169,13 +170,13 @@ def process_video():
        camera.close()
 
        # save data frame
-       df = pd.DataFrame(log)
-       df.to_csv("run_005_1.csv", index=False)
+       df = pd.DataFrame(log_frames)
+       df.to_csv("run_005_4.csv", index=False)
 
-       print(f"[INFO] Saved {len(df)} frames to run_005_1.csv") 
+       print(f"[INFO] Saved {len(df)} frames to run_005_4.csv") 
 
        df_tracks=pd.DataFrame(track_log) # save individual tracking information
-       df_tracks.to_csv("run_005_1_tracks.csv", index=False)
+       df_tracks.to_csv("run_005_4_tracks.csv", index=False)
 
        print(f"[INFO] Saved {len(df_tracks)} track states")
     
