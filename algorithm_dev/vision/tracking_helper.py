@@ -1,13 +1,19 @@
 ﻿import cv2
 from track import Track
+import numpy as np
+from track import Track
 
 # constants to access 
 THRESH_VAL = 12 # frame subtraction threshold
 MIN_AREA = 5 # minimum blob area (pixels)
 MAX_AREA = 3500 # max blob area (pixels)
 MAX_MISSED = 5 # allows tracks to survive 5 frames without a detection
-MAX_TRACK_DIST = 25 # max distance for track association (pixels), need to be a bit because the objects are falling / flying
+MAX_TRACK_DIST = 50 # max distance for track association (pixels), need to be a bit because the objects are falling / flying
 MAX_TRACKS = 20 # TODO tune this
+
+#kalman constants
+FPS = 60.0 # or read from video metadata
+DT = 1.0 / FPS
 
 # ROI Configuration
 # define ROI as fractions of frame dimensions
@@ -78,7 +84,13 @@ def associate_detections_to_tracking_fast(detections, tracks, next_id):
         return [t for t in tracks if t.missed <= MAX_MISSED], next_id
 
     used = [False] * len(detections)
-    max_dist_sq = MAX_TRACK_DIST * MAX_TRACK_DIST
+    # dynamic gating based on velocity
+    #max_dist_sq = MAX_TRACK_DIST * MAX_TRACK_DIST
+    vx, vy = t.fk.statePost[2:,0]
+    speed = np.hypot(vx, vy)
+
+    adaptive_dist=max(MAX_TRACK_DIST, speed * DT *2)
+    max_dist_sq = adaptive_dist* adaptive_dist
 
     predicted = {t: t.predict() for t in tracks} # predict once per frame
     # match existing tracks using greedy algorithm 
@@ -121,7 +133,7 @@ def associate_detections_to_tracking_fast(detections, tracks, next_id):
     return tracks, next_id
 
 
-def deduplicate_tracks(tracks, radius=15): #TODO FIX THIS TO IMPROVE DEDUPLICATION, CURRENTLY BASED ON LAST POSITION ONLY
+def deduplicate_tracks(tracks, radius=15, vel_thresh=50): #TODO FIX THIS TO IMPROVE DEDUPLICATION, CURRENTLY BASED ON LAST POSITION ONLY
     # distance gating in association or deduplication only once every N frames
     # prevent same location collapse
     if len(tracks) <=1: 
@@ -137,13 +149,36 @@ def deduplicate_tracks(tracks, radius=15): #TODO FIX THIS TO IMPROVE DEDUPLICATI
         x, y = t.last_position
         key = (x // radius, y // radius)
 
+        vx1, vy1 = t.kf.statePost[2:, 0]
+
         duplicate = False
 
+        # check in neighbordin bins
         for dx in (-1, 0, 1): 
             for dy in (-1, 0, 1): 
-                if (key[0] + dx, key[1] + dy) in grid: 
+
+                neighbor_key = (key[0] + dx, key[1] + dy)
+                if neighbor_key not in grid:
+                    continue
+
+                k = grid[neighbor_key]
+
+                # get spatial distance
+                dist = np.linalg.norm(
+                    np.array(t.last_position) - np.array(k.last_position)
+                )
+
+                if dist > radius: 
+                    continue
+
+                # velocity similarity check
+                vx2, vy2 = k.kf.statePost[2:,0]
+                vel_diff = np.hypot(vx1 - vx2, vy1 - vy2)
+
+                if vel_diff < vel_thresh: 
                     duplicate = True
                     break
+                
                 if duplicate: 
                     break
 

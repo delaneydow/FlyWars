@@ -97,8 +97,8 @@ def process_video():
                     f"Track {t.id} raw state:",
                     t.kf.statePost.ravel()
                 )
-                if frame_idx %3 == 0: # only track every 3 frames to gauge velocity better
-                    track_states[t.id] = classify_state(t)
+                #if frame_idx %3 == 0: # only track every 3 frames to gauge velocity better
+                track_states[t.id] = classify_state(t) # just look every frame, trivial cost
 
                 track_log.append({
                     "frame": frame_idx,

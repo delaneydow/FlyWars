@@ -6,8 +6,8 @@ import numpy as np
 HISTORY = 50 # frame to keep for plotting
 
 #kalman constants
-FPS = 60.0 # or read from video metadata
-DT = 1.0 / FPS
+DT = 1770405900.27867 - 1770405900.2466636 # taken from time stamps in csv folumn to determine fps rate
+FPS = 1.0 / DT
 
 
 # === TRACKING CLASS ===
@@ -56,19 +56,23 @@ class Track:
         return pred[0,0], pred[1,0]
 
     def update(self, detection=None):
-        self.kf.predict() #ensure filter doesn't get stuck correcting a static state
+        # prediction already happens with predicted = {t: t.predict()} in association / tracking helper
+        #self.kf.predict() #ensure filter doesn't get stuck correcting a static state
         if detection is not None: 
             measured = np.array([[np.float32(detection[0])],
                                  [np.float32(detection[1])]])
 
-            # bootstrap on second detection so it actually triggers 
-            if len(self.centroids) == 2:
+            # bootstrap on first detection for velocity bootstrap timing to minimize "hovering lock"
+            if len(self.centroids) >=1:
                 dx = detection[0] - self.centroids[-1][0]
                 dy = detection[1] - self.centroids[-1][1]
                 #dx = self.centroids[-1][0] - self.centroids[-2][0]
                 #dy = self.centroids[-1][1] - self.centroids[-2][1]
-                self.kf.statePost[2,0] = dx / DT
-                self.kf.statePost[3,0] = dy / DT
+
+                # avoid noise bootstrapping
+                if abs(dx) + abs(dy) > 2: 
+                    self.kf.statePost[2,0] = dx / DT
+                    self.kf.statePost[3,0] = dy / DT
 
 
             self.kf.correct(measured)
@@ -79,7 +83,9 @@ class Track:
             self.missed = 0
             self.last_seen +=1 #update age of detection
         else: #no detection 
-            self.centroids.append(self.centroids[-1])
+            #self.centroids.append(self.centroids[-1])
+            px, py = self.predict()
+            self.centroids.append((int(px), int(py))) # have velocity persist through brief occlusion if necessary 
             self.missed += 1
             self.last_seen +=1 #needs to also increment when missed
 
