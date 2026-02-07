@@ -56,7 +56,7 @@ def score_track(track, state, laser_origin):
     state_weight = {
         "flying": 1.0, 
         "hovering": 0.5, 
-        "stationary": 0.1,
+        "accelerating": 0.1,
     }.get(state, 0.3)
 
     # uncertainty (trace of covariance)
