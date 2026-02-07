@@ -10,7 +10,7 @@ def classify_state(track):
     speed = track.speed() # gets speed from centroids
 
     # TODO MAY NEED TO ADJUST THRESHOLDS IF NECESSARY (velocity given in pixels / second)
-    if speed < 10:
+    if speed < 5:
         return "hovering"
     elif speed < 60: 
         return "cruising"
