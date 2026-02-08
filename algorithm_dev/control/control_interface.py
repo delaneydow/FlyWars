@@ -1,9 +1,10 @@
 # control_interface.py
 from planner import plan_targets
+import numpy as np
 from laser_interface import LaserInterface
 
 laser = LaserInterface()
-LASER_ORIGIN = (512, 384)  # example
+LASER_ORIGIN = np.array([512, 384])  # example
 
 
 def control_step(tracks, track_states, frame_idx):

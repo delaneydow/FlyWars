@@ -7,8 +7,9 @@ Prioritization by: sort by score, respect laser cooldown period, predict aim poi
 
 #planner.py
 
-from object_scoring import score_track, predict_position
+from object_scoring import score_track, predict_position, PREDICT_HORIZON
 from mirror_planner import MirrorPlanner
+import time 
 
 # === DECLARE CONSTANTS ===
 LASER_COOLDOWN_FRAMES = 2
@@ -27,13 +28,15 @@ def plan_targets(tracks, track_states, laser_origin, frame_idx):
         if score > 0: 
             scored.append((score, t))
 
-    scored.sort(reverse=True, key=lambda x: x[0])
+    # --- sort: hovering first, then cruising, then by score ---
+    state_priority = {"hovering": 2, "cruising": 1, "accelerating":0}
+    scored.sort(key=lambda x: (state_priority.get(x[2],0), x[0]), reverse=True)
 
     plan = []
     fire_time = frame_idx
 
     for _, track in scored: 
-        aim = predict_position(track)
+        aim = predict_position(track, k=PREDICT_HORIZON)
         plan.append({
             "track_id": track.id,
             "aim": aim, 
