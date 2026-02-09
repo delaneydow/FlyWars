@@ -11,6 +11,7 @@ import numpy as np
 
 ENGAGE_RADIUS = 120       # px from laser center
 MIN_SPEED = 2.0           # px/frame
+MAX_COV_THRESHOLD = 15 #TODO see if i need to tune this value
 
 # latency detection (in ms)
 camera_latency = 1# exposure + sensor readout + gigE transfer + driver buffering
@@ -74,9 +75,13 @@ def score_track(track, state, laser_origin):
     # account for position + velocity
     vx, vy = track.kf.statePost[2:, 0]
     speed=np.hypot(vx, vy)
+    
+    # uncertainty (trace of covariance)
+    cov = track.kf.errorCovPost
+    uncertainty = cov[0,0] + cov[1,1]
 
-    # if object is not moving fast enough, don't prioritize 
-    if speed < MIN_SPEED: #TODO figure out what best way to do this may be
+    #filter out high-uncertaint tracks (skip scoring)
+    if uncertainty > MAX_COV_THRESHOLD: 
         return 0.0
 
     # predict position
@@ -95,12 +100,6 @@ def score_track(track, state, laser_origin):
       #  "hovering": 0.5, 
        # "accelerating": 0.1,
     #}.get(state, 0.3)
-
-    # uncertainty (trace of covariance)
-    cov = track.kf.errorCovPost
-    uncertainty = cov[0,0] + cov[1,1]
-
-    #TODO filter extreme errors / high uncertainty
 
     score = (state_weight * speed / (1.0 + distance * 0.05) * np.exp(-UNCERTAINTY_PENALTY * uncertainty))
     

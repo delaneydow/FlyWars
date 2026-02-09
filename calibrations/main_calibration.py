@@ -8,6 +8,8 @@ from pathlib import Path
 from sklearn.linear_model import RANSACRegressor
 from sklearn.linear_model import LinearRegression
 from scipy.interpolate import Rbf
+from scipy.spatial import ConvexHull
+from matplotlib.path import Path
 
 def main(): 
     here = Path(__file__).resolve().parent
@@ -131,5 +133,48 @@ def main():
     # --- print first few beam coordinates ---
     for (bx, by) in xy[:5]:
         print(f"Beam @ ({bx:.1f}, {by:.1f})")
+    
+    # generate mirror lookup map 
+
+    GRID = 120 # resolution TODO need to adjust this 
+
+    u_grid = np.linspace(u_min, u_max, GRID)
+    v_grid = np.linspace(v_min, v_max, GRID)
+    uu, vv = np.meshgrid(u_grid, v_grid)
+
+    uv_flat = np.column_stack([uu.ravel(), vv.ravel()])
+
+    # predict beam positions
+    uvn = (uv_flat - uv_mean) / uv_std
+    x_map = fx(uvn[:,0], uvn[:,1])
+    y_map = fy(uvn[:,0], uvn[:,1])
+
+    mirror_map = {
+        "u": uv_flat[:,0],
+        "v": uv_flat[:,1],
+        "x": x_map,
+        "y": y_map, 
+        "uv_mean": uv_mean.tolist(), 
+        "uv_std": uv_std.tolist(),
+        #"bounds": [u_min, u_max, v_min, v_max]
+    }
+
+    hull = ConvexHull(xy) # xy = measured beam positions
+    hull_pts = xy[hull.vertices]
+
+    np.savez("mirror_map1.npz", 
+             **mirror_map, hull=hull_pts)
+    print("saved mirror_map1.npz")
+
+    plt.figure(figsize=(6,6))
+    plt.scatter(x_map, y_map, s=2)
+    plt.title("Mirror reachable beam positions")
+    plt.xlabel("x [px]")
+    plt.ylabel("y [px]")
+    plt.gca().invert_yaxis()
+    plt.axis("equal")
+    plt.show()
+
+
 if __name__ == "__main__":
     main()

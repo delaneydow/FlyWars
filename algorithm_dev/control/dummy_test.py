@@ -4,7 +4,7 @@ import time
 import matplotlib.pyplot as plt
 
 from planner import plan_targets
-from object_scoring import predict_position, classify_motion, PREDICT_HORIZON
+from object_scoring import predict_position, classify_motion, PREDICT_HORIZON, MAX_COV_THRESHOLD
 from control_interface import control_step
 
 # === latency settings ===
@@ -74,6 +74,9 @@ for frame_idx, frame_df in df.groupby("frame"):
         for t in tracks:
             if t.id not in future_df.index:
                 continue
+            cov_trace = np.trace(t.kf.errorCovPost)
+            if cov_trace > MAX_COV_THRESHOLD:
+                continue # skip track
 
             #pred_xy = predict_position(t, k=PREDICT_HORIZON)
 
@@ -91,6 +94,8 @@ for frame_idx, frame_df in df.groupby("frame"):
             #print("pred_xy:", pred_xy, type(pred_xy))
             #print("actual_xy:", actual_xy, type(actual_xy))
 
+            # collect stats for k = PREDICT_HORIZON
+            pred_xy = predict_position(t, k=PREDICT_HORIZON)
             err = np.linalg.norm(pred_xy - actual_xy)
             prediction_errors.append(err)
             prediction_speeds.append(speed)
@@ -105,7 +110,9 @@ for frame_idx, frame_df in df.groupby("frame"):
 
 # error plotting 
 plt.figure()
-plt.scatter(prediction_speeds, prediction_errors, alpha=0.4)
+# plot extremes separately to better visualize distribution
+plt.scatter([s for s,e in zip(prediction_speeds,prediction_errors) if e<200],
+            [e for e in prediction_errors if e<200], alpha=0.3)
 plt.xlabel("Speed (px/frame)")
 plt.ylabel("Prediction error (px)")
 plt.title("Prediction error vs speed")

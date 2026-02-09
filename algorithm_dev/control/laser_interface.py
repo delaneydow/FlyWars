@@ -14,3 +14,6 @@ class LaserInterface:
     def fire(self, aim_point):
         if self.ready:
             self.send(*aim_point)
+            # TODO set cooldown
+            self.ready = False
+            # re-enable after cooldown using timer / asyncio / sleep 
