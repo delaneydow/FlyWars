@@ -171,12 +171,12 @@ def process_video():
 
        # save data frame
        df = pd.DataFrame(log_frames)
-       df.to_csv("run_005_4.csv", index=False)
+       df.to_csv("run_005_6.csv", index=False)
 
-       print(f"[INFO] Saved {len(df)} frames to run_005_4.csv") 
+       print(f"[INFO] Saved {len(df)} frames to run_005_6.csv") 
 
        df_tracks=pd.DataFrame(track_log) # save individual tracking information
-       df_tracks.to_csv("run_005_4_tracks.csv", index=False)
+       df_tracks.to_csv("run_005_6_tracks.csv", index=False)
 
        print(f"[INFO] Saved {len(df_tracks)} track states")
     
