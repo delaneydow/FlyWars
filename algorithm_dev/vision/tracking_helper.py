@@ -75,12 +75,12 @@ def detect_moving_objects_fast(prev_gray, curr_gray):
     return detections, thresh
 
 
-def associate_detections_to_tracking_fast(detections, tracks, next_id):
+def associate_detections_to_tracking_fast(detections, tracks, next_id, dt):
     
     # USING EARLY-EXIT GATED REPLACEMENT
     if not detections: 
         for t in tracks: 
-            t.update(None)
+            t.update(None, dt)
         return [t for t in tracks if t.missed <= MAX_MISSED], next_id
 
     used = [False] * len(detections)
@@ -88,7 +88,7 @@ def associate_detections_to_tracking_fast(detections, tracks, next_id):
     #max_dist_sq = MAX_TRACK_DIST * MAX_TRACK_DIST
     
 
-    predicted = {t: t.predict() for t in tracks} # predict once per frame
+    predicted = {t: t.predict(dt) for t in tracks} # predict once per frame
     # match existing tracks using greedy algorithm 
     for t in tracks: 
         # adaptive velocity gating needs to be defined inside loop based on the tracks 

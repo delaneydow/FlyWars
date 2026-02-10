@@ -50,7 +50,7 @@ def process_video():
     # grab first frame to initialize prev_gray
     frame = camera.get_frame()
     prev_gray, roi_offset = preprocess_and_crop(frame)
-    
+    last_time = None
     
     #begin loop, occurs over duration of video
     try: 
@@ -59,6 +59,15 @@ def process_video():
 
             frame = camera.get_frame() # start stream
             start_frame = time.perf_counter() #records detection speed
+
+            now = time.time()
+            # compute dt dynamically from timestamps
+            if last_time is None: 
+                dt = 1/60.0 # fallback first time
+            else: 
+                dt = now - last_time
+
+            last_time = now
     
              # Preprocess & crop
             start = time.perf_counter()
@@ -74,7 +83,7 @@ def process_video():
             # tracking only (no merging) 
             start = time.perf_counter()
             tracks, next_track_id = associate_detections_to_tracking_fast(
-                detections, tracks, next_track_id
+                detections, tracks, next_track_id, dt
             )
             tracks = deduplicate_tracks(tracks) # one track per fly, protect stationary leak
             t_tracking = time.perf_counter() - start
