@@ -12,8 +12,8 @@ MAX_TRACK_DIST = 50 # max distance for track association (pixels), need to be a 
 MAX_TRACKS = 20 # TODO tune this
 
 #kalman constants
-FPS = 60.0 # or read from video metadata
-DT = 1.0 / FPS
+#FPS = 60.0 # or read from video metadata
+#DT = 1.0 / FPS
 
 # ROI Configuration
 # define ROI as fractions of frame dimensions
@@ -86,19 +86,19 @@ def associate_detections_to_tracking_fast(detections, tracks, next_id):
     used = [False] * len(detections)
     # dynamic gating based on velocity
     #max_dist_sq = MAX_TRACK_DIST * MAX_TRACK_DIST
+    
 
     predicted = {t: t.predict() for t in tracks} # predict once per frame
     # match existing tracks using greedy algorithm 
     for t in tracks: 
-        px, py =predicted[t]
-
-         # --- adaptive gating per track ---
-        vx, vy = t.kf.statePost[2:, 0]
+        # adaptive velocity gating needs to be defined inside loop based on the tracks 
+        vx, vy = t.kf.statePost[2:,0]
         speed = np.hypot(vx, vy)
 
-        adaptive_dist = max(MAX_TRACK_DIST, speed * DT * 2)
-        max_dist_sq = adaptive_dist * adaptive_dist
+        adaptive_dist=max(MAX_TRACK_DIST, speed * dt *2)
+        max_dist_sq = adaptive_dist* adaptive_dist
 
+        px, py =predicted[t]
         best_idx = -1
         best_dist_sq = max_dist_sq
 
@@ -112,8 +112,7 @@ def associate_detections_to_tracking_fast(detections, tracks, next_id):
             dist_sq = ddx * ddx + ddy * ddy
 
             # early accept if very close 
-            #if dist_sq < best_dist_sq and dist_sq < MAX_TRACK_DIST**2: # only allow detections near predicted position 
-            if dist_sq < best_dist_sq: 
+            if dist_sq < best_dist_sq and dist_sq < MAX_TRACK_DIST**2: # only allow detections near predicted position 
                 best_dist_sq = dist_sq
                 best_idx = i 
                 # optional and TODO TEST hard gate
@@ -182,13 +181,13 @@ def deduplicate_tracks(tracks, radius=15, vel_thresh=50): #TODO FIX THIS TO IMPR
                 if vel_diff < vel_thresh: 
                     duplicate = True
                     break
-                
-                if duplicate: 
-                    break
 
-            if not duplicate: 
-                keep.append(t)
-                grid[key] = t
+            if duplicate: 
+                break
+
+        if not duplicate: 
+            keep.append(t)
+            grid[key] = t
         #if not any(np.linalg.norm(
          #   np.array(t.last_position) - np.array(k.last_position)
         #) < radius for k in keep): 

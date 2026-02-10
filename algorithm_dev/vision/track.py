@@ -5,10 +5,6 @@ import numpy as np
 # constants
 HISTORY = 50 # frame to keep for plotting
 
-#kalman constants
-DT = 1770405900.27867 - 1770405900.2466636 # taken from time stamps in csv folumn to determine fps rate
-FPS = 1.0 / DT
-
 
 # === TRACKING CLASS ===
 # used in tracking.py
@@ -26,36 +22,57 @@ class Track:
         self.kf = cv2.KalmanFilter(4,2)
         
         self.kf.transitionMatrix = np.array([
-            [1, 0, DT, 0],
-            [0, 1, 0, DT], 
+            [1, 0, 1, 0],
+            [0, 1, 0, 1], 
             [0, 0, 1, 0], 
             [0, 0, 0, 1]], dtype=np.float32)
 
         self.kf.measurementMatrix=np.array([
             [1, 0, 0, 0],
             [0, 1, 0, 0]], dtype=np.float32)
-
+        
+        self.q = 1e-2
+        
+        # tune noise matrices to reduce overshoot 
         self.kf.errorCovPost = np.eye(4, dtype=np.float32) * 10 #initialize velocity covariance
-        self.kf.processNoiseCov = np.eye(4, dtype=np.float32) *1e-1
-        self.kf.measurementNoiseCov = np.eye(2, dtype=np.float32) * 1e-0
+        self.kf.processNoiseCov[:] = 0
+        self.kf.measurementNoiseCov = np.eye(2, dtype=np.float32) * 5e-1 #1e-0 TODO tune this 
 
         self.kf.statePre = np.array([[centroid[0]],
                                      [centroid[1]],
                                      [0],
                                      [0]], dtype=np.float32)
 
-        self.kf.statePost = np.array([
-                                    [centroid[0]],
-                                    [centroid[1]],
-                                    [0.0],
-                                    [0.0]
-                                ], dtype=np.float32)
+        self.kf.statePost = self.kf.statePre.copy()
 
-    def predict(self): 
+    def predict(self, dt): 
+        self.kf.transitionMatrix[0,2] = dt
+        self.kf.transitionMatrix[1,3] = dt
+
+        state = getattr(self, "state", "hovering")
+
+        #dyanamic q
+        if state == "hovering": 
+            q = self.q * 0.2
+        elif state == "accelerating": 
+            q = self.q * 3.0
+        else: 
+            q = self.q
+
+        dt2 = dt * dt
+        # rebuild process noise covariance
+        self.kf.processNoiseCov[:] = 0 
+        self.kf.processNoiseCov[0,0] = q * dt2
+        self.kf.processNoiseCov[1,1] = q * dt2
+        self.kf.processNoiseCov[2,2] = q
+        self.kf.processNoiseCov[3,3] = q 
+        # scale process noise with dt
+        #np.fill_diagonal(self.kf.processNoiseCov, q * dt * dt)
+
         pred = self.kf.predict()
         return pred[0,0], pred[1,0]
 
-    def update(self, detection=None):
+    def update(self, detection=None, dt=1/60.0): #TODO use effective dt = frame_dt + system_latency
         # prediction already happens with predicted = {t: t.predict()} in association / tracking helper
         #self.kf.predict() #ensure filter doesn't get stuck correcting a static state
         if detection is not None: 
@@ -69,16 +86,22 @@ class Track:
                 #dx = self.centroids[-1][0] - self.centroids[-2][0]
                 #dy = self.centroids[-1][1] - self.centroids[-2][1]
 
+                dt_eff = 2 * dt
+
+                # smoothed velocity
+                self.kf.statePost[2,0] = dx / dt_eff
+                self.kf.statePost[3,0] = dy / dt_eff
+
                 # avoid noise bootstrapping
-                if abs(dx) + abs(dy) > 2: 
-                    self.kf.statePost[2,0] = dx / DT
-                    self.kf.statePost[3,0] = dy / DT
+                #if abs(dx) + abs(dy) > 2: 
+                #    self.kf.statePost[2,0] = dx / dt
+                #    self.kf.statePost[3,0] = dy / dt
 
 
             self.kf.correct(measured)
             
-            x = int(self.kf.statePost[0,0])
-            y = int(self.kf.statePost[1,0])
+            x = float(self.kf.statePost[0,0]) #float rather than int to maintain precision
+            y = float(self.kf.statePost[1,0])
             self.centroids.append((x,y))
             self.missed = 0
             self.last_seen +=1 #update age of detection

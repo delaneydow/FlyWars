@@ -7,21 +7,33 @@
 # - produce safe (u,v) mirror commands
 
 import numpy as np
-from matplotlib.path import Path
-import pyserial # for access with mre-3 serial port 
+from matplotlib.path import Path as MplPath
+#import pyserial # for access with mre-3 serial port 
 
 
 class MirrorPlanner: 
-    def __init__(self, map_file="mirror_map.npz"):
+    def __init__(self, map_file="mirror_map1.npz"):
 
         data = np.load(map_file)
 
-        self.u = data["u"]
-        self.v = data["y"]
-        self.x = data["x"]
-        self.y = data[y]
+        # calibrations samples
+        self.uv = data["uv"]
+        self.xy = data["xy"]
+
+        # lookup grid
+        self.x_map = data["x_map"]
+        self.y_map = data["y_map"]
+        self.u_map = data["u_map"]
+        self.v_map = data["v_map"]
+
+        #normalization
+        self.uv_mean = data["uv_mean"]
+        self.uv_std = data["uv_std"]
+
+        # command bounds
         self.u_min, self.u_max, self.v_min, self.v_max = data["bounds"]
-        self.hull_path = Path(data["hull"])
+
+        self.hull_path = MplPath(data["hull"]) #convex hull for mirror reachability
         
         #self.spot_radius_px = spot_radius_px #TODO figure out how to integrate this again
 
@@ -33,6 +45,17 @@ class MirrorPlanner:
     
     def is_reachable(self, x, y): # checks if coordinates can be accessed
         return self.hull_path.contains_point((x,y))
+    
+    def clip_to_reachable(self, x, y): 
+        # removes horns, extrapolation instability, mirror overdrive
+        if self.hull_path.contains_point((x,y)): 
+            return x, y
+        
+        # snap to nearest reachable beam point
+        d = np.hypot(self.x_map - x, self.y_map - y)
+        idx = np.argmin(d)
+
+        return self.x_map[idx], self.y_map[idx]
         
     def predict_xy(self, u, v): 
         uvn = (np.column_stack([u, v]) - self.uv_mean) / self.uv_std
@@ -43,10 +66,14 @@ class MirrorPlanner:
         #TODO go back & see if this can be faster via pre-computed UV --> XY map
     def find_uv_for_xy(self, x_target, y_target): 
 
-        d = np.hypot(self.x, x_target, self.y - y_target)
+        # clip first
+        x_target, y_target = self.clip_to_reachable(x_target, y_target)
+
+        d = np.hypot(self.x_map -x_target,
+                     self.y_map - y_target)
         idx = np.argmin(d)
 
         return (
-            np.clip(self.u[idx], self.u_min, self.u_max),
-            np.clip(self.v[idx], self.v_min, self.v_max)
+            np.clip(self.u_map[idx], self.u_min, self.u_max),
+            np.clip(self.v_map[idx], self.v_min, self.v_max)
         )

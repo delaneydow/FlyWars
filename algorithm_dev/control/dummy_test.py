@@ -30,8 +30,6 @@ class DummyTrack:
         )
 
 # === LOAD CSV ===
-#BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-#csv_path = os.path.join(BASE_DIR, "..", "algorithm_dev", "run_005_4.tracks.csv")
 
 df = pd.read_csv(
     r"C:\Users\dmdow\Documents\GitHub\FlyWars\algorithm_dev\run_005_4_tracks.csv"

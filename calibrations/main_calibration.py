@@ -9,7 +9,7 @@ from sklearn.linear_model import RANSACRegressor
 from sklearn.linear_model import LinearRegression
 from scipy.interpolate import Rbf
 from scipy.spatial import ConvexHull
-from matplotlib.path import Path
+#from matplotlib.path import Path as MplPath
 
 def main(): 
     here = Path(__file__).resolve().parent
@@ -149,21 +149,24 @@ def main():
     x_map = fx(uvn[:,0], uvn[:,1])
     y_map = fy(uvn[:,0], uvn[:,1])
 
-    mirror_map = {
-        "u": uv_flat[:,0],
-        "v": uv_flat[:,1],
-        "x": x_map,
-        "y": y_map, 
-        "uv_mean": uv_mean.tolist(), 
-        "uv_std": uv_std.tolist(),
-        #"bounds": [u_min, u_max, v_min, v_max]
-    }
-
     hull = ConvexHull(xy) # xy = measured beam positions
     hull_pts = xy[hull.vertices]
 
     np.savez("mirror_map1.npz", 
-             **mirror_map, hull=hull_pts)
+             #calibration samples
+             uv=uv, xy=xy, 
+
+             # lookup grid 
+             u_map=uv_flat[:,0], v_map=uv_flat[:,1], x_map=x_map, y_map=y_map, 
+
+             #normalization
+             uv_mean=uv_mean, uv_std=uv_std, 
+
+             #safe bounds
+             bounds=np.array([u_min, u_max, v_min, v_max]), 
+
+             #reachability hull
+             hull=hull_pts)
     print("saved mirror_map1.npz")
 
     plt.figure(figsize=(6,6))
@@ -174,6 +177,14 @@ def main():
     plt.gca().invert_yaxis()
     plt.axis("equal")
     plt.show()
+
+    # visualization sanity check
+    plt.scatter(xy[:,0], xy[:,1], s=3)
+    hull = hull_pts
+    plt.plot(hull[:,0], hull[:,1], 'r-')
+    plt.gca().invert_yaxis()
+    plt.show()
+
 
 
 if __name__ == "__main__":
