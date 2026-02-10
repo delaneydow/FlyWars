@@ -107,7 +107,7 @@ class Track:
             self.last_seen +=1 #update age of detection
         else: #no detection 
             #self.centroids.append(self.centroids[-1])
-            px, py = self.predict()
+            px, py = self.predict(dt)
             self.centroids.append((int(px), int(py))) # have velocity persist through brief occlusion if necessary 
             self.missed += 1
             self.last_seen +=1 #needs to also increment when missed
