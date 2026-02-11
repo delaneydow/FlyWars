@@ -36,7 +36,7 @@ class Track:
         # tune noise matrices to reduce overshoot 
         self.kf.errorCovPost = np.eye(4, dtype=np.float32) * 10 #initialize velocity covariance
         self.kf.processNoiseCov[:] = 0
-        self.kf.measurementNoiseCov = np.eye(2, dtype=np.float32) * 5e-1 #1e-0 TODO tune this 
+        self.kf.measurementNoiseCov = np.eye(2, dtype=np.float32) * 3.0 #1e-0 TODO tune this 
 
         self.kf.statePre = np.array([[centroid[0]],
                                      [centroid[1]],
@@ -108,7 +108,7 @@ class Track:
         else: #no detection 
             #self.centroids.append(self.centroids[-1])
             px, py = self.predict(dt)
-            self.centroids.append((int(px), int(py))) # have velocity persist through brief occlusion if necessary 
+            self.centroids.append((float(px), float(py))) # have velocity persist through brief occlusion if necessary 
             self.missed += 1
             self.last_seen +=1 #needs to also increment when missed
 
