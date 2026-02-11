@@ -40,7 +40,7 @@ def process_video():
     # instantiate empty arrays for tracking and latency calculations
     next_track_id = 0 
     #explicit multi-target capacity metrics
-    tracks, log_frames, track_log, latencies, det_counts, track_counts, frames, thresh_frames = [], [], [], [], [], [], [], []
+    tracks, log_frames, track_log, track_debug, latencies, det_counts, track_counts, frames, thresh_frames = [], [], [], [], [], [], [], [], []
     # kalman state factoring   
     track_states = {}
     frame_idx = 0
@@ -85,7 +85,8 @@ def process_video():
             tracks, next_track_id = associate_detections_to_tracking_fast(
                 detections, tracks, next_track_id, dt
             )
-            tracks = deduplicate_tracks(tracks) # one track per fly, protect stationary leak
+            if frame_idx % 3 == 0: # run less often (i.e. less expensive)
+                tracks = deduplicate_tracks(tracks) # one track per fly, protect stationary leak
             t_tracking = time.perf_counter() - start
 
             now = time.time()
@@ -168,6 +169,20 @@ def process_video():
                     (t.speed() for t in tracks),default=0)
             })
 
+            track_debug.append({
+                "frame_idx": frame_idx,
+                "track_id": t.id,
+                "detected": len(detections) is not None,
+                "centroid_x": float(t.centroids[-1],[0]),
+                "centroid_y": float(t.centroids[-1][1]),
+                "kf_vx": float(t.kf.statePost[2,0]),
+                "kf_vy": float(t.kf.statePost[3,0]),
+                "speed": float(t.speed()),
+                "missed": t.missed(),
+                #pred_x, pred_y, measurement_dx, measurement_dy
+                "dt": dt
+            })
+
 
             if cv2.waitKey(1) & 0xFF == 27:  # ESC
                 print("[INFO] ESC pressed — stopping")
@@ -188,6 +203,10 @@ def process_video():
        df_tracks.to_csv("run_005_6_tracks.csv", index=False)
 
        print(f"[INFO] Saved {len(df_tracks)} track states")
+
+       df_debug = pd.DataFrame(track_debug)
+       df_debug.to_csv("run_005_08_debug.csv", index=False)
+       print(f"[INFO] Saved {len(df_debug)} frames") 
     
     return latencies, det_counts, track_counts, frames, thresh_frames
         

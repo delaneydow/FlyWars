@@ -2,6 +2,8 @@
 from track import Track
 import numpy as np
 from track import Track
+from scipy.optimize import linear_sum_assignment
+
 
 # constants to access 
 THRESH_VAL = 12 # frame subtraction threshold
@@ -10,10 +12,6 @@ MAX_AREA = 3500 # max blob area (pixels)
 MAX_MISSED = 5 # allows tracks to survive 5 frames without a detection
 MAX_TRACK_DIST = 50 # max distance for track association (pixels), need to be a bit because the objects are falling / flying
 MAX_TRACKS = 20 # TODO tune this
-
-#kalman constants
-#FPS = 60.0 # or read from video metadata
-#DT = 1.0 / FPS
 
 # ROI Configuration
 # define ROI as fractions of frame dimensions
@@ -76,6 +74,8 @@ def detect_moving_objects_fast(prev_gray, curr_gray):
 
 
 def associate_detections_to_tracking_fast(detections, tracks, next_id, dt):
+
+    #  === SWITCHING TO HUNGARIAN ALGORITHM ===
     
     # USING EARLY-EXIT GATED REPLACEMENT
     if not detections: 
@@ -88,48 +88,52 @@ def associate_detections_to_tracking_fast(detections, tracks, next_id, dt):
     #max_dist_sq = MAX_TRACK_DIST * MAX_TRACK_DIST
     
 
-    predicted = {t: t.predict(dt) for t in tracks} # predict once per frame
-    # match existing tracks using greedy algorithm 
-    for t in tracks: 
-        # adaptive velocity gating needs to be defined inside loop based on the tracks 
-        vx, vy = t.kf.statePost[2:,0]
-        speed = np.hypot(vx, vy)
+    predicted = np.array([t.predict(dt) for t in tracks], dtype=np.float32)
+    detections_np = np.array(detections, dtype=np.float32)
 
-        adaptive_dist=max(MAX_TRACK_DIST, speed * dt *2)
-        max_dist_sq = adaptive_dist* adaptive_dist
+    if len(predicted) and len(detections_np): 
 
-        px, py =predicted[t]
-        best_idx = -1
-        best_dist_sq = max_dist_sq
+        # squared distance matrix (FAST vectorized) 
+        diff = predicted[:, None, :] - detections_np[None, :, :]
+        cost = np.sum(diff *2, axis=2) #squared euclidian distance
 
-        #early-exit dist gating
-        for i, (dx, dy) in enumerate(detections): 
-            if used[i]: 
-                continue
-                
-            ddx = dx-px 
-            ddy = dy-py 
-            dist_sq = ddx * ddx + ddy * ddy
+        # hard gating for speed + stability
+        #cost[cost > MAX_TRACK_DIST**2] = 1e6 #TODO replacing this velocity 
 
-            # early accept if very close 
-            if dist_sq < best_dist_sq and dist_sq < MAX_TRACK_DIST**2: # only allow detections near predicted position 
-                best_dist_sq = dist_sq
-                best_idx = i 
-                # optional and TODO TEST hard gate
-                if dist_sq < 35: # ~5px
-                    break
-        if best_idx !=-1: 
-            t.update(detections[best_idx])
-            used[best_idx]=True
-        else:
-            t.update(None)
+        # trying dynamic distance gating per track
+        for i, t in enumerate(tracks): 
+            #estimate max expected movement this frame
+            vmax = t.speed() * dt
+            allowed_dist_sq = max(MAX_TRACK_DIST**2, (vmax*2)**2) # vmax as safety factor both for fast/slow
+            # apply gating
+            cost[i, cost[i,:], allowed_dist_sq] = 1e6
 
-    # generate new tracks ONLY for unmatched detections
-    for i, d in enumerate (detections): 
-        if not used[i] and len(tracks) < MAX_TRACKS: #caps # of tracks to stabilize runtime
-            tracks.append(Track(next_id, d))
-            next_id += 1
 
+        rows, cols = linear_sum_assignment(cost)
+
+        assigned_tracks= set()
+        assigned_dets=set()
+
+        for r, c in zip(rows, cols): 
+            if cost[r,c] < MAX_TRACK_DIST**2:
+                tracks[r].update(detections[c], dt)
+                assigned_tracks.add(r)
+                assigned_dets.add(c)
+
+        #unmatched tracks 
+        for i, t in enumerate(tracks): 
+            if i not in assigned_tracks:
+                t.update(None, dt)
+
+        # unmatched detections --> new tracks
+        for i, d in enumerate(detections): 
+            if i not in assigned_dets and len(tracks) < MAX_TRACKS: 
+                tracks.append(Track(next_id, d))
+                next_id +=1
+    else: 
+        for t in tracks:
+            t.update(None,dt)
+    
     # remove and prune old tracks
     tracks = [t for t in tracks if t.missed <=MAX_MISSED]
 
@@ -156,7 +160,7 @@ def deduplicate_tracks(tracks, radius=15, vel_thresh=50): #TODO FIX THIS TO IMPR
 
         duplicate = False
 
-        # check in neighbordin bins
+        # check in neighbording bins
         for dx in (-1, 0, 1): 
             for dy in (-1, 0, 1): 
 
@@ -167,11 +171,14 @@ def deduplicate_tracks(tracks, radius=15, vel_thresh=50): #TODO FIX THIS TO IMPR
                 k = grid[neighbor_key]
 
                 # get spatial distance
-                dist = np.linalg.norm(
-                    np.array(t.last_position) - np.array(k.last_position)
-                )
+                #dist = np.linalg.norm(np.array(t.last_position) - np.array(k.last_position))
+                dist_sq = (t.last_position[0] - k.last_position[0])**2 + (t.last_position[1] - k.last_position[1])**2
+                if dist_sq < radius**2:
+                    vel_diff = np.hypot(vx1 - vx2, vy1 - vy2)
+                    if vel_diff < vel_thresh:
+                        duplicate = True
 
-                if dist > radius: 
+                if dist_sq > radius: #TODO check that this should be dist_sq then? 
                     continue
 
                 # velocity similarity check

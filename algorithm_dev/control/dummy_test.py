@@ -32,7 +32,7 @@ class DummyTrack:
 # === LOAD CSV ===
 
 df = pd.read_csv(
-    r"C:\Users\dmdow\Documents\GitHub\FlyWars\algorithm_dev\run_005_4_tracks.csv"
+    r"C:\Users\dmdow\Documents\GitHub\FlyWars\algorithm_dev\run_006_1_tracks.csv"
 )
 #df = pd.read_csv(csv_path)
 print("Starting replay")

@@ -26,7 +26,7 @@ def plan_targets(tracks, track_states, laser_origin, frame_idx):
         state = track_states.get(t.id, "unknown")
         score = score_track(t, state, laser_origin)
         if score > 0: 
-            scored.append((score, t))
+            scored.append((score, t, state))
 
     # --- sort: hovering first, then cruising, then by score ---
     state_priority = {"hovering": 2, "cruising": 1, "accelerating":0}
@@ -35,7 +35,7 @@ def plan_targets(tracks, track_states, laser_origin, frame_idx):
     plan = []
     fire_time = frame_idx
 
-    for _, track in scored: 
+    for _, track, _ in scored: 
         aim = predict_position(track, k=PREDICT_HORIZON)
         plan.append({
             "track_id": track.id,
