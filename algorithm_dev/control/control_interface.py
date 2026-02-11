@@ -3,10 +3,11 @@ from planner import plan_targets
 import numpy as np
 from laser_interface import LaserInterface
 from mirror_planner import MirrorPlanner
+from object_scoring import SPOT_RADIUS_PX_SAFE
 
 # classes
 laser = LaserInterface()
-mirror = MirrorPlanner(map_file="mirror_map1.npz")  
+mirror = MirrorPlanner(map_file="mirror_map1.npz", spot_radius_px=SPOT_RADIUS_PX_SAFE)  
 
 # constants
 LASER_ORIGIN = np.array([512, 384])  # example #TODO figure out if this is correct or not (measure in reality)

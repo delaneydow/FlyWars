@@ -7,8 +7,9 @@ Prioritization by: sort by score, respect laser cooldown period, predict aim poi
 
 #planner.py
 
-from object_scoring import score_track, predict_position, PREDICT_HORIZON
+from object_scoring import score_track, predict_position, PREDICT_HORIZON, MAX_COV_THRESHOLD, SPOT_RADIUS_PX_SAFE
 from mirror_planner import MirrorPlanner
+import numpy as np
 import time 
 
 # === DECLARE CONSTANTS ===
@@ -18,7 +19,7 @@ LASER_COOLDOWN_FRAMES = 2
 
 def plan_targets(tracks, track_states, laser_origin, frame_idx): 
     """ 
-    Returns ordered list of fire commands 
+    Generate planned shots, including redundancy within spot radius 
     """
 
     scored = []
@@ -37,12 +38,24 @@ def plan_targets(tracks, track_states, laser_origin, frame_idx):
 
     for _, track, _ in scored: 
         aim = predict_position(track, k=PREDICT_HORIZON)
+
+        # add redundant points if high uncertainty 
+        cov_trace = np.trace(track.kf.errorCovPost)
+        redundancy = 1
+
+        if cov_trace > MAX_COV_THRESHOLD * 0.5:
+            redundancy = 3 # 3 points for uncertain track
+
+        for r in range(redundancy): 
+            # small random jitter within spot radius
+            jitter = np.random.uniform(-SPOT_RADIUS_PX_SAFE/2, SPOT_RADIUS_PX_SAFE/2, size=2)
         plan.append({
             "track_id": track.id,
-            "aim": aim, 
+            "aim": aim + jitter, 
             "fire_frame": fire_time
         })
-        fire_time += LASER_COOLDOWN_FRAMES
+        fire_time += LASER_COOLDOWN_FRAMES * redundancy
+
     return plan
 
 

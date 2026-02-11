@@ -12,7 +12,7 @@ from matplotlib.path import Path as MplPath
 
 
 class MirrorPlanner: 
-    def __init__(self, map_file="mirror_map1.npz"):
+    def __init__(self, map_file="mirror_map1.npz", spot_radius_px=None):
 
         data = np.load(map_file)
 
@@ -34,8 +34,7 @@ class MirrorPlanner:
         self.u_min, self.u_max, self.v_min, self.v_max = data["bounds"]
 
         self.hull_path = MplPath(data["hull"]) #convex hull for mirror reachability
-        
-        #self.spot_radius_px = spot_radius_px #TODO figure out how to integrate this again
+        self.spot_radius_px = spot_radius_px or 6.0 #TODO figure out how to integrate this again
 
     def clamp_uv(self, u, v): 
         return(
@@ -46,6 +45,7 @@ class MirrorPlanner:
     def is_reachable(self, x, y): # checks if coordinates can be accessed
         return self.hull_path.contains_point((x,y))
     
+    # clamp aim points using spot radius if needed
     def clip_to_reachable(self, x, y): 
         # removes horns, extrapolation instability, mirror overdrive
         if self.hull_path.contains_point((x,y)): 

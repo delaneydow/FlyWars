@@ -12,6 +12,12 @@ import numpy as np
 ENGAGE_RADIUS = 120       # px from laser center
 MIN_SPEED = 2.0           # px/frame
 MAX_COV_THRESHOLD = 15 #TODO see if i need to tune this value
+SPOT_RADIUS_MM = 1.7 # laser spot radius in mm #TODO get actual estimate 
+# empirical estimates
+MM_PER_PX = 0.533 # mm per pixel
+SPOT_RADIUS_PX = SPOT_RADIUS_MM / MM_PER_PX
+CALIBRATION_ERROR_FACTOR = 1.05 # 5% error margin
+SPOT_RADIUS_PX_SAFE = SPOT_RADIUS_MM * CALIBRATION_ERROR_FACTOR
 
 # latency detection (in ms)
 camera_latency = 1# exposure + sensor readout + gigE transfer + driver buffering
@@ -88,6 +94,12 @@ def score_track(track, state, laser_origin):
     prediction = predict_position(track)
     distance = np.linalg.norm(prediction - laser_origin)
 
+    # treat "within spot" as fully engaged
+    if distance <= SPOT_RADIUS_PX_SAFE:
+        distance_weight = 1.0 # no penalty
+    else: 
+        distance_weight = SPOT_RADIUS_PX_SAFE / distance # decays smoothly 
+
     # if distance is outside of engage radius i.e. not within range 
     if distance > ENGAGE_RADIUS: 
         return 0.0
@@ -102,6 +114,7 @@ def score_track(track, state, laser_origin):
     #}.get(state, 0.3)
 
     score = (state_weight * speed / (1.0 + distance * 0.05) * np.exp(-UNCERTAINTY_PENALTY * uncertainty))
+    score = score * distance_weight
     
     return float(score)
 

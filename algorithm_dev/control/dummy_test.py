@@ -4,7 +4,7 @@ import time
 import matplotlib.pyplot as plt
 
 from planner import plan_targets
-from object_scoring import predict_position, classify_motion, PREDICT_HORIZON, MAX_COV_THRESHOLD
+from object_scoring import predict_position, classify_motion, PREDICT_HORIZON, MAX_COV_THRESHOLD, SPOT_RADIUS_PX_SAFE
 from control_interface import control_step
 
 # === latency settings ===
@@ -43,8 +43,7 @@ frame_lookup = {
     for f, g in df.groupby("frame")
 }
 
-prediction_errors = []
-prediction_speeds = []
+prediction_errors, prediction_speeds, prediction_inside_spot = [], [], []
 
 horizon_results = {k: [] for k in HORIZON_RANGE}
 
@@ -70,6 +69,7 @@ for frame_idx, frame_df in df.groupby("frame"):
         future_df = frame_lookup[future_frame]
 
         for t in tracks:
+            # track predicted vs actual vs spot radius
             if t.id not in future_df.index:
                 continue
             cov_trace = np.trace(t.kf.errorCovPost)
@@ -95,8 +95,11 @@ for frame_idx, frame_df in df.groupby("frame"):
             # collect stats for k = PREDICT_HORIZON
             pred_xy = predict_position(t, k=PREDICT_HORIZON)
             err = np.linalg.norm(pred_xy - actual_xy)
+            inside_spot = err <=SPOT_RADIUS_PX_SAFE #log whether actual was inside predicted spot
             prediction_errors.append(err)
             prediction_speeds.append(speed)
+            prediction_inside_spot.append(inside_spot)
+            inside_rate=np.mean(prediction_inside_spot)
             for k in HORIZON_RANGE:
                 errors = np.array(horizon_results[k])
                 print(f"Horizon {k}: mean={errors.mean():.2f}, median={np.median(errors):.2f}, max={errors.max():.2f}")
@@ -132,3 +135,5 @@ if prediction_errors:
     print("Mean error:", np.mean(prediction_errors))
     print("Median error:", np.median(prediction_errors))
     print("Max error:", np.max(prediction_errors))
+
+print(f"Fraction of predictions hitting within spot radius: {inside_rate*100:.1f}%")
