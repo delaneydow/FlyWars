@@ -14,8 +14,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.optimize import linear_sum_assignment
 from collections import deque
-import cProfile
-import pstats
 from camera_interface import Camera
 from track import Track
 from state import classify_state
@@ -28,9 +26,6 @@ FRAME_CAP = 100 #only saves a select group of frames for quick validation
 REALTIME = True # disable visualization for real-time mode
 MAX_FRAMES = 1000 # save csv after 1000 frames for all experimental trials
 
-#visualization frames
-DRAW_EVERY = 3
-
 # === MAIN PROCESSING LOOP ===
 
 def process_video(): 
@@ -40,7 +35,7 @@ def process_video():
     # instantiate empty arrays for tracking and latency calculations
     next_track_id = 0 
     #explicit multi-target capacity metrics
-    tracks, log_frames, track_log, track_debug, latencies, det_counts, track_counts, frames, thresh_frames = [], [], [], [], [], [], [], [], []
+    tracks, log_frames, track_log, latency_log, track_debug, latencies, det_counts, track_counts, frames, thresh_frames = [], [], [], [], [], [], [], [], [], []
     # kalman state factoring   
     track_states = {}
     frame_idx = 0
@@ -123,38 +118,43 @@ def process_video():
                     "cov_xx": float(cov[0,0]),
                     "cov_yy": float(cov[1,1]),
                 })
+
+                track_debug.append({
+                "frame_idx": frame_idx,
+                "track_id": t.id,
+                "detected": len(detections) is not None,
+                "centroid_x": float(t.centroids[-1],[0]),
+                "centroid_y": float(t.centroids[-1][1]),
+                "kf_vx": float(t.kf.statePost[2,0]),
+                "kf_vy": float(t.kf.statePost[3,0]),
+                "speed": float(t.speed()),
+                "missed": t.missed(),
+                #pred_x, pred_y, measurement_dx, measurement_dy
+                "dt": dt
+            })
+                
+                 # latency testing
+            latency_log.append({
+                "frame": frame_idx,
+                "t_preprocess_ms": t_preprocess*1000,
+                "t_detection_ms": t_move*1000,
+                "t_tracking_ms": t_tracking*1000,
+                "t_total_ms": t_total_ms,
+                "n detections": len(detections),
+                "n tracks": len(tracks)
+            })
         
-            # Visualization - only do for videos
-            if not REALTIME: 
-      
-                start = time.perf_counter()
-                visual = cv2.cvtColor(curr_gray, cv2.COLOR_GRAY2BGR)
-                cv2.rectangle(visual, (0,0), (visual.shape[1]-1, visual.shape[0]-1), (255,255,0), 1)
-                for t in tracks:
-                    if len(t.centroids) >= 2: 
-                        cv2.line(visual, t.centroids[-2], t.centroids[-1], (0, 255,0), 1)
-                    #for i in range(1, len(t.centroids)):
-                        # repeat n times
-                        #cv2.line(visual, t.centroids[i-1], t.centroids[i], (0,255,0), 1)
-                    # do NOT repeat n times (moved outside loop)
-                    cv2.circle(visual, t.last_position, 3, (0,0,255), -1)
-                    cv2.putText(visual, f"ID {t.id}", (t.last_position[0]+5, t.last_position[1]-5),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255,0,0), 1)
-                    # ring buffer 
-                    if frame_idx % 10 == 0:
-                        frames.append(visual.copy())
-                        if len(frames) > FRAME_CAP:
-                            frames.pop(0)
-                t_vis = time.perf_counter() - start
     
             # Metrics
-            total_frame = (time.perf_counter() - start_frame) * 1000.0
+            total_frame = (time.perf_counter() - start_frame) #in seconds
+            t_total_ms = total_frame * 1000
             print(f"Frame {frame_idx}: preprocess={t_preprocess*1000:.1f}ms, "
                   f"move={t_move*1000:.1f}ms, "
                   f"tracking={t_tracking*1000:.1f}ms,"
-                  f"total={total_frame:.1f}ms")
+                  f"total={t_total_ms:.1f}ms")
+        
 
-            latencies.append(total_frame)
+            latencies.append(t_total_ms)
             det_counts.append(len(detections))
             track_counts.append(len(tracks))
 
@@ -169,20 +169,7 @@ def process_video():
                     (t.speed() for t in tracks),default=0)
             })
 
-            track_debug.append({
-                "frame_idx": frame_idx,
-                "track_id": t.id,
-                "detected": len(detections) is not None,
-                "centroid_x": float(t.centroids[-1],[0]),
-                "centroid_y": float(t.centroids[-1][1]),
-                "kf_vx": float(t.kf.statePost[2,0]),
-                "kf_vy": float(t.kf.statePost[3,0]),
-                "speed": float(t.speed()),
-                "missed": t.missed(),
-                #pred_x, pred_y, measurement_dx, measurement_dy
-                "dt": dt
-            })
-
+           
 
             if cv2.waitKey(1) & 0xFF == 27:  # ESC
                 print("[INFO] ESC pressed — stopping")
@@ -193,21 +180,28 @@ def process_video():
     finally: 
        camera.close()
 
-       # save data frame
+       # === SAVE OFF DATA LOGGING ===
+
+       # data frame index
        df = pd.DataFrame(log_frames)
        df.to_csv("run_005_6.csv", index=False)
-
        print(f"[INFO] Saved {len(df)} frames to run_005_6.csv") 
 
+        # tracking log
        df_tracks=pd.DataFrame(track_log) # save individual tracking information
        df_tracks.to_csv("run_005_6_tracks.csv", index=False)
-
        print(f"[INFO] Saved {len(df_tracks)} track states")
 
+        # tracking debug
        df_debug = pd.DataFrame(track_debug)
        df_debug.to_csv("run_005_08_debug.csv", index=False)
        print(f"[INFO] Saved {len(df_debug)} frames") 
+
+        # latency logging
+       df_latency = pd.DataFrame(latency_log)
+       df_latency.to_csv("pipeline_latency_log.csv", index=False)
+       print(f"[INFO] Saved {len(df_latency)} frames latency log")
+
     
-    return latencies, det_counts, track_counts, frames, thresh_frames
-        
-latencies, det_counts, track_counts, frames, thresh_frames = process_video()
+    return tracks, latency_log, det_counts, track_counts
+    
