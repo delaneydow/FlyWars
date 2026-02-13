@@ -15,7 +15,6 @@ from algorithm_dev.vision.tracking import process_video
 # === latency settings ===
 FRAME_DT = 1/120.0
 TOTAL_LATENCY = 0.075 # seconds (initial estimate)
-PREDICT_FRAMES = int(TOTAL_LATENCY/FRAME_DT)
 HORIZON_RANGE = range(4,13) # frames to sweep 
 
 

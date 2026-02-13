@@ -8,12 +8,16 @@
 
 import numpy as np
 from matplotlib.path import Path as MplPath
-#import pyserial # for access with mre-3 serial port 
+import serial # for access with mre-3 serial port 
 
 
 class MirrorPlanner: 
-    def __init__(self, map_file="mirror_map1.npz", spot_radius_px=None):
+    def __init__(self, port="/dev/ttyACM0", baud=115200, map_file="mirror_map1.npz", spot_radius_px=None):
 
+        # serial compatibility
+        self.ser = serial.Serial(port, baud, timeout=0.01)
+
+        # viable mirror points
         data = np.load(map_file)
 
         # calibrations samples
@@ -77,3 +81,7 @@ class MirrorPlanner:
             np.clip(self.u_map[idx], self.u_min, self.u_max),
             np.clip(self.v_map[idx], self.v_min, self.v_max)
         )
+    
+    def send_uv(self, u, v): 
+        cmd = f"{u:.3f},{v:.3f}\n"
+        self.ser.write(cmd.encode())

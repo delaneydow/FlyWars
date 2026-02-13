@@ -35,5 +35,6 @@ def control_step(tracks, track_states, frame_idx):
     #    return 
 
     # fire only the first planned shot per frame
-    cmd = plan[0]
+    cmd = plan[0] #TODO see if this is right/need this
+    MirrorPlanner.send_uv(cmd["u"], cmd["v"]) 
     laser.fire(cmd["aim"]) #TODO : can also fire using mirror UV mayve

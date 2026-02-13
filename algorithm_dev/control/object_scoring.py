@@ -6,6 +6,7 @@
 
 #imports
 import numpy as np
+from laser_interface import MIN_FIRE_TIME
 
 # tunable constants
 
@@ -28,8 +29,8 @@ laser_trigger_latency = 1 #modulation delay + thermal dwell constraint
 
 # predict horizon tied to latency 
 FRAME_DT = 1/120.0 # seconds per frame
-SYSTEM_LATENCY = 0.075 # (listed in seconds) #TODO tweak this value!!! 
-PREDICT_HORIZON =  8 #int(SYSTEM_LATENCY/FRAME_DT) # num. of frames TODO change/refine eventually
+SYSTEM_LATENCY = 0.075 + MIN_FIRE_TIME# (listed in seconds) #TODO tweak this value!!! 
+PREDICT_HORIZON =  int(SYSTEM_LATENCY/ FRAME_DT) #8 #int(SYSTEM_LATENCY/FRAME_DT) # num. of frames TODO change/refine eventually
 UNCERTAINTY_PENALTY = 0.5 
 
 # function definitions
