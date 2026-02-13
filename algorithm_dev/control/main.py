@@ -24,22 +24,21 @@ HORIZON_RANGE = range(4,13) # frames to sweep
 def main(): 
     # capture tracking output
     print("[INFO] Starting tracking stage...")
-    tracks, latency_log, det_counts, track_counts, tracks_per_frame = process_video()
+    tracks, track_states, tracks_per_frame, track_states_per_frame = process_video()
+
 
     print("[INFO] Starting control stage...")
     pipeline_log = []
 
-    for frame_idx, track_objs in enumerate(tracks_per_frame): # tracks per frame is a list of Track lists per frame
-        
-        start=time.perf_counter()
+    for frame_idx, (track_objs, states) in enumerate(zip(tracks_per_frame, track_states_per_frame)): # tracks per frame is a list of Track lists per frame
 
         # build track_states dict 
-        track_states = {t.id: classify_motion(np.hypot(t.kf.statePost[2,0], t.kf.statePost[3,0])) for t in tracks}
+        #track_states = {t.id: classify_motion(np.hypot(t.kf.statePost[2,0], t.kf.statePost[3,0])) for t in tracks}
 
         # run control
-        t0 = time.perf_counter()
-        control_step(track_objs, track_states, frame_idx)
-        t_cntrl = time.perf_counter-t0  *1000 #ms
+        start = time.perf_counter()
+        control_step(track_objs, states, frame_idx)
+        t_cntrl = time.perf_counter()-start  *1000 #ms
         t_combined =(time.perf_counter() - start) * 1000  # ms
 
         #thermal monitoring
@@ -71,10 +70,10 @@ def main():
             f"temp={cpu_temp:.1f}C"
         )
 
-        # data logging 
-        df_control = pd.DataFrame(pipeline_log)
-        df_control.to_csv("pipeline_log.csv", index=False)
-        print(f"[INFO] Saved {len(df_control)} frames pipeline latency log")
+    # data logging 
+    df_control = pd.DataFrame(pipeline_log)
+    df_control.to_csv("pipeline_log.csv", index=False)
+    print(f"[INFO] Saved {len(df_control)} frames pipeline latency log")
 
 if __name__=="__main__": 
     main()
