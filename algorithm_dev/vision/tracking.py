@@ -35,7 +35,8 @@ def process_video():
     # instantiate empty arrays for tracking and latency calculations
     next_track_id = 0 
     #explicit multi-target capacity metrics
-    tracks, log_frames, track_log, latency_log, track_debug, latencies, det_counts, track_counts, frames, thresh_frames = [], [], [], [], [], [], [], [], [], []
+    tracks, log_frames, track_log, latency_log, track_debug, latencies, det_counts, track_counts= [], [], [], [], [], [], [], []
+    tracks_per_frame = []
     # kalman state factoring   
     track_states = {}
     frame_idx = 0
@@ -157,6 +158,7 @@ def process_video():
             latencies.append(t_total_ms)
             det_counts.append(len(detections))
             track_counts.append(len(tracks))
+            tracks_per_frame.append(list(tracks))
 
              # log results
             log_frames.append({
@@ -203,5 +205,5 @@ def process_video():
        print(f"[INFO] Saved {len(df_latency)} frames latency log")
 
     
-    return tracks, latency_log, det_counts, track_counts
+    return tracks, latency_log, det_counts, track_counts, tracks_per_frame
     
