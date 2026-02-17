@@ -22,11 +22,12 @@ class LaserInterface:
         self.ready = True
 
 
+
     def send(self, x, y):
         """
-        Send coordinates to laser hardware
+        Prints coordinates
         """
-        # TODO: replace with SDK / serial / GPIO
+        # TODO: GPIO
         print(f"[LASER] firing at ({x:.1f}, {y:.1f})")
 
     

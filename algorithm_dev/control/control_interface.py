@@ -1,22 +1,25 @@
 # control_interface.py
 from planner import plan_targets
 import numpy as np
+import time
 from laser_interface import LaserInterface
 from mirror_planner import MirrorPlanner
 from object_scoring import SPOT_RADIUS_PX_SAFE
 
 # classes
 laser = LaserInterface()
-mirror = MirrorPlanner(map_file="mirror_map1.npz", spot_radius_px=SPOT_RADIUS_PX_SAFE)  
+mirror = MirrorPlanner(map_file="mirror_map1.npz", spot_radius_px=SPOT_RADIUS_PX_SAFE) 
+mirror_settle_time = 0.25 # seconds 
 
 # constants
-LASER_ORIGIN = np.array([512, 384])  # example #TODO figure out if this is correct or not (measure in reality)
+beam_position = np.array([512, 384])  # TODO figure out 0,0 origin, initialize once 
 
 
 def control_step(tracks, track_states, frame_idx):
+    global beam_position
 
     # plan targets
-    plan = plan_targets(tracks, track_states, LASER_ORIGIN, frame_idx) #TODO i think this is actually mirror, pass where mirror moved to last time it fired? 
+    plan = plan_targets(tracks, track_states, beam_position, frame_idx) #TODO i think this is actually mirror, pass where mirror moved to last time it fired? 
 
     if not plan:
         return #do nothing for frame
@@ -29,12 +32,10 @@ def control_step(tracks, track_states, frame_idx):
         cmd["u"] = u
         cmd["v"] = v
 
-    # fire laser on highest-priority ranked target
-
-    #if uncertainty > threshold: #TODO establish these params
-    #    return 
-
-    # fire only the first planned shot per frame
+    # fire laser on highest-priority ranked target, first planned shot per frame
     cmd = plan[0] #TODO see if this is right/need this
-    MirrorPlanner.send_uv(cmd["u"], cmd["v"]) 
+    mirror.send_uv(cmd["u"], cmd["v"]) 
+    time.sleep(mirror_settle_time) #allow for settling time before firing laser
     laser.fire(cmd["aim"]) #TODO : can also fire using mirror UV mayve
+
+    beam_position = cmd["aim"] #stores last position of mirror

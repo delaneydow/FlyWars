@@ -61,8 +61,6 @@ def predict_position(track, k=PREDICT_HORIZON):
     x_pred = x + vx * adaptive_k + 0.5 * ax * adaptive_k**2
     y_pred = y + vy * adaptive_k + 0.5 * ay * adaptive_k**2
 
-    
-
     return np.array([x_pred, y_pred])
 
 def classify_motion(speed):
@@ -74,7 +72,7 @@ def classify_motion(speed):
         return "accelerating"
 
 
-def score_track(track, state, laser_origin): 
+def score_track(track, state, beam_position): 
     """ 
     Returns priority score, higher = more urgent
     """
@@ -93,7 +91,7 @@ def score_track(track, state, laser_origin):
 
     # predict position #TODO I DON'T THINK THIS IS RIGHT
     prediction = predict_position(track)
-    distance = np.linalg.norm(prediction - laser_origin) # TODO why using laser origin as the distance measurement?
+    distance = np.linalg.norm(prediction - beam_position)
 
     # treat "within spot" as fully engaged
     if distance <= SPOT_RADIUS_PX_SAFE:
