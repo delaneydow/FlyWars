@@ -11,7 +11,7 @@ class LaserInterface:
         self.line.request(consumer="laser", type=gpiod.LINE_REQ_DIR_OUT)
         self.ready = True
 
-    def fire(self, aim_point):
+    def fire(self):
         if not self.ready:
             return
         

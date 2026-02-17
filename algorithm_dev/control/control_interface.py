@@ -9,7 +9,7 @@ from object_scoring import SPOT_RADIUS_PX_SAFE
 # classes
 laser = LaserInterface()
 mirror = MirrorPlanner(map_file="mirror_map1.npz", spot_radius_px=SPOT_RADIUS_PX_SAFE) 
-mirror_settle_time = 0.25 # seconds 
+mirror_settle_time = 0.25 # seconds, given rating of settling time + how long to switch directions (avg.) 
 
 # constants
 beam_position = np.array([512, 384])  # TODO figure out 0,0 origin, initialize once 
