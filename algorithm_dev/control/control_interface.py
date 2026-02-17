@@ -16,7 +16,7 @@ LASER_ORIGIN = np.array([512, 384])  # example #TODO figure out if this is corre
 def control_step(tracks, track_states, frame_idx):
 
     # plan targets
-    plan = plan_targets(tracks, track_states, LASER_ORIGIN, frame_idx)
+    plan = plan_targets(tracks, track_states, LASER_ORIGIN, frame_idx) #TODO i think this is actually mirror, pass where mirror moved to last time it fired? 
 
     if not plan:
         return #do nothing for frame

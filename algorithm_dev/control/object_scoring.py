@@ -91,9 +91,9 @@ def score_track(track, state, laser_origin):
     if uncertainty > MAX_COV_THRESHOLD: 
         return 0.0
 
-    # predict position
+    # predict position #TODO I DON'T THINK THIS IS RIGHT
     prediction = predict_position(track)
-    distance = np.linalg.norm(prediction - laser_origin)
+    distance = np.linalg.norm(prediction - laser_origin) # TODO why using laser origin as the distance measurement?
 
     # treat "within spot" as fully engaged
     if distance <= SPOT_RADIUS_PX_SAFE:

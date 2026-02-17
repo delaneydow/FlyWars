@@ -8,9 +8,8 @@ Prioritization by: sort by score, respect laser cooldown period, predict aim poi
 #planner.py
 
 from object_scoring import score_track, predict_position, PREDICT_HORIZON, MAX_COV_THRESHOLD, SPOT_RADIUS_PX_SAFE
-from mirror_planner import MirrorPlanner
 import numpy as np
-import time 
+
 
 # === DECLARE CONSTANTS ===
 LASER_COOLDOWN_FRAMES = 2

@@ -1,15 +1,11 @@
-import numpy as np
 import pandas as pd
 import time
-import matplotlib.pyplot as plt
 
-from planner import plan_targets
-from object_scoring import predict_position, classify_motion, PREDICT_HORIZON, MAX_COV_THRESHOLD, SPOT_RADIUS_PX_SAFE
 from control_interface import control_step
 from cooldown import *
 
 # import Tracking pipeline
-from algorithm_dev.vision.track import Track #import Track class
+from algorithm_dev.vision.track import Track #import Track class, TODO see if track needs to be passed/accessed
 from algorithm_dev.vision.tracking import process_video
 
 # === latency settings ===
