@@ -88,17 +88,20 @@ class MirrorPlanner:
         " Send U/V coordinates as X/Y commands to MRE-3 via USB serial "
         "MRE-3 Expects X and Y within range -1.0 to 1.0 (already calibrated for)"
 
-        # send commands 
-        self.ser.write(u.encode())
-        #time.sleep(0.01) TODO try without to minimize latency 
-        self.ser.write(v.encode())
-        #time.sleep(0.01)
 
-        # read echo or status 
+        # Clamp values just to be safe
+        u = float(np.clip(u, -1.0, 1.0))
+        v = float(np.clip(v, -1.0, 1.0))
+
+        # Proper command format
+        cmd_x = f"X={u:.3f}\r\n"
+        cmd_y = f"Y={v:.3f}\r\n"
+
+        # Send to serial port
+        self.ser.write(cmd_x.encode())
+        self.ser.write(cmd_y.encode())
+
+        # Optional: read echo / status
         if self.ser.in_waiting:
             resp = self.ser.read(self.ser.in_waiting)
-            print("[Mirror] response:", resp.decode(errors='ignore'))
-        
-        
-        cmd = f"{u:.3f},{v:.3f}\n"
-        self.ser.write(cmd.encode())
+            print("[Mirror response]", resp.decode(errors='ignore'))
