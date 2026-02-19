@@ -1,5 +1,9 @@
+<<<<<<< Updated upstream
 algorithm_dev/control/__pycache__/laser_interface.cpython-312.pyc
 algorithm_dev/control/__pycache__/mirror_planner.cpython-312.pyc
 algorithm_dev/control/__pycache__/object_scoring.cpython-312.pyc
 algorithm_dev/control/__pycache__/planner.cpython-312.pyc
 algorithm_dev/control/__pycache__/control_interface.cpython-312.pyc
+=======
+*.pyc
+>>>>>>> Stashed changes
