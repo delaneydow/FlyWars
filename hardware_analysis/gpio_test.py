@@ -1,28 +1,27 @@
 # gpio pulse test
 
-import gpiod
+from machine import Pin, PWM
 import time
 
-CHIP = "gpiochip0"
-LINE = 4   # Pin 7, uses GPIO4 line (function #1 listed in gpio pinout)
+#pin number may change
+laser_pin = PWM(Pin(4)) # gpio04 -- function #7 on PIN #7 which is the PWM hookup
 
-chip = gpiod.Chip(CHIP)
-line = chip.get_line(LINE)
-
-line.request(consumer="laser_test",
-             type=gpiod.LINE_REQ_DIR_OUT)
+# set PWM frequency (laser spec allows up to 5kHz)
+laser_pin.freq(500) # 500 hz, safe to start
 
 try:
     while True:
-        print("Laser ON")
-        line.set_value(1)
-        time.sleep(0.5)
-
-        print("Laser OFF")
-        line.set_value(0)
-        time.sleep(0.5)
+        print("low power")
+        laser_pin.duty_u16(10000) #15% duty
+        time.sleep(5)
+        
+        print("med power")
+        laser_pin.duty_u16(30000) # ~45% duty
+        time.sleep(5)
+        
+        print("off")
+        laser_pin.duty_u16(0)
+        time.sleep(3)
 
 except KeyboardInterrupt:
-    pass
-finally:
-    line.release()
+    laser_pin.deinit()
