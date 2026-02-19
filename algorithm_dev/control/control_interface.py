@@ -33,7 +33,7 @@ def control_step(tracks, track_states, frame_idx):
         cmd["v"] = v
 
     # fire laser on highest-priority ranked target, first planned shot per frame
-    cmd = plan[0] #TODO see if this is right/need this
+    cmd = plan[0] #highest priority target #TODO see if this is right/need this
     mirror.send_uv(cmd["u"], cmd["v"]) 
     time.sleep(mirror_settle_time) #allow for settling time before firing laser
     laser.fire() 

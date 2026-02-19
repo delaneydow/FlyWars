@@ -9,10 +9,11 @@
 import numpy as np
 from matplotlib.path import Path as MplPath
 import serial # for access with mre-3 serial port 
+import time
 
 
 class MirrorPlanner: 
-    def __init__(self, port="/dev/ttyACM0", baud=115200, map_file="mirror_map1.npz", spot_radius_px=None):
+    def __init__(self, port="/dev/ttyUSB0", baud=115200, map_file="mirror_map1.npz", spot_radius_px=None):
 
         # serial compatibility
         self.ser = serial.Serial(port, baud, timeout=0.01)
@@ -83,5 +84,21 @@ class MirrorPlanner:
         )
     
     def send_uv(self, u, v): 
+
+        " Send U/V coordinates as X/Y commands to MRE-3 via USB serial "
+        "MRE-3 Expects X and Y within range -1.0 to 1.0 (already calibrated for)"
+
+        # send commands 
+        self.ser.write(u.encode())
+        #time.sleep(0.01) TODO try without to minimize latency 
+        self.ser.write(v.encode())
+        #time.sleep(0.01)
+
+        # read echo or status 
+        if self.ser.in_waiting:
+            resp = self.ser.read(self.ser.in_waiting)
+            print("[Mirror] response:", resp.decode(errors='ignore'))
+        
+        
         cmd = f"{u:.3f},{v:.3f}\n"
         self.ser.write(cmd.encode())
