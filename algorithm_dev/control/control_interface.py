@@ -36,6 +36,6 @@ def control_step(tracks, track_states, frame_idx):
     cmd = plan[0] #TODO see if this is right/need this
     mirror.send_uv(cmd["u"], cmd["v"]) 
     time.sleep(mirror_settle_time) #allow for settling time before firing laser
-    laser.fire(cmd["aim"]) #TODO : can also fire using mirror UV mayve
+    laser.fire() 
 
     beam_position = cmd["aim"] #stores last position of mirror
