@@ -19,8 +19,8 @@ import sys
 
 # ==== CONFIGURATION ===
 CAMERA_INDEX = 0 # adjust if needed
-MIRROR_PORT = "/dev/ttyUSB0" # TODO adjust/check this if necessary 
-LASER_PORT = "dev/ttyACM0" #TODO adjust/check this, should be the microcontroller port 
+MIRROR_PORT = "/dev/serial/by-id/usb-Optotune_Virtual_ComPort_3578335B3233-if00 " # adjust if necessary
+LASER_PORT = "dev/serial/by-id/usb-MicroPython_Board_in_FS_mode_e6641cb2cf162f27-if00" #should be the microcontroller port 
 
 MIRROR_BAUD = 115200
 LASER_BAUD = 115200
@@ -45,7 +45,7 @@ def test_camera():
 
 
 # === MIRROR SERIAL TEST ===
-def test_mirror(port="/dev/ttyUSB0"):
+def test_mirror(port="/dev/serial/by-id/usb-Optotune_Virtual_ComPort_3578335B3233-if00"):
     print("Testing mirror controller...")
 
     try: 
@@ -58,15 +58,18 @@ def test_mirror(port="/dev/ttyUSB0"):
         print("Status:", ser.readline())
 
         # Movement test
-        ser.write(b"X=0.2\r\n")
+        ser.write(b"X=0.05\r\n")
         time.sleep(1)
 
-        ser.write(b"X=-0.2\r\n")
+        ser.write(b"X=-0.05\r\n")
         time.sleep(1)
 
         ser.write(b"X=0.0\r\n")
+        time.sleep(1)
+        
+        ser.write(b"Y=0.0\r\n")
         print("Mirror test complete.")
-
+        
         ser.close()
         print("[PASS] Connection, X and Y movement established")
         #return True
