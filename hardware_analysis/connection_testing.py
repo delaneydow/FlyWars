@@ -23,7 +23,7 @@ from algorithm_dev.vision.camera_interface import Camera
 # ==== CONFIGURATION ===
 CAMERA_INDEX = 0 # adjust if needed
 MIRROR_PORT = "/dev/serial/by-id/usb-Optotune_Virtual_ComPort_3578335B3233-if00 " # adjust if necessary
-LASER_PORT = "dev/serial/by-id/usb-MicroPython_Board_in_FS_mode_e6641cb2cf162f27-if00" #should be the microcontroller port 
+LASER_PORT = "/dev/serial/by-id/usb-MicroPython_Board_in_FS_mode_e6641cb2cf162f27-if00" #should be the microcontroller port 
 
 MIRROR_BAUD = 115200
 LASER_BAUD = 115200
