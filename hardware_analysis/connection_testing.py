@@ -16,6 +16,9 @@ import time
 import subprocess
 from algorithm_dev.vision.camera_interface import Camera
 import sys
+import os
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # ==== CONFIGURATION ===
 CAMERA_INDEX = 0 # adjust if needed
