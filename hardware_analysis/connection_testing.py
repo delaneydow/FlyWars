@@ -14,11 +14,11 @@ import cv2
 import serial
 import time
 import subprocess
-from algorithm_dev.vision.camera_interface import Camera
 import sys
 import os
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from algorithm_dev.vision.camera_interface import Camera
 
 # ==== CONFIGURATION ===
 CAMERA_INDEX = 0 # adjust if needed
@@ -49,7 +49,7 @@ def test_camera():
 
 # === MIRROR SERIAL TEST ===
 def test_mirror(port="/dev/serial/by-id/usb-Optotune_Virtual_ComPort_3578335B3233-if00"):
-    print("Testing mirror controller...")
+    print("\n ***TESTING MIRROR... ***")
 
     try: 
 
@@ -59,18 +59,23 @@ def test_mirror(port="/dev/serial/by-id/usb-Optotune_Virtual_ComPort_3578335B323
         # Status check
         ser.write(b"STATUS\r\n")
         print("Status:", ser.readline())
+        time.sleep(1)
 
         # Movement test
         ser.write(b"X=0.05\r\n")
+        print("X:", ser.readline())
         time.sleep(1)
 
         ser.write(b"X=-0.05\r\n")
+        print("X:", ser.readline())
         time.sleep(1)
 
         ser.write(b"X=0.0\r\n")
+        print("X:", ser.readline())
         time.sleep(1)
         
         ser.write(b"Y=0.0\r\n")
+        print("Y:", ser.readline())
         print("Mirror test complete.")
         
         ser.close()
@@ -84,7 +89,7 @@ def test_mirror(port="/dev/serial/by-id/usb-Optotune_Virtual_ComPort_3578335B323
 
 # === LASER PWM SERIAL TEST ===
 def test_laser():
-    print("\n=== LASER PWM TEST ===")
+    print("\n*** LASER PWM TEST ***")
 
     try:
         ser = serial.Serial(LASER_PORT, LASER_BAUD, timeout=1)
