@@ -83,7 +83,7 @@ def process_video():
             # tracking only (no merging) 
             start = time.perf_counter()
             tracks, next_track_id = associate_detections_to_tracking_fast(
-                detections, tracks, next_track_id, dt
+                detections, tracks, next_track_id, 
             )
             if frame_idx % 3 == 0: # run less often (i.e. less expensive)
                 tracks = deduplicate_tracks(tracks) # one track per fly, protect stationary leak
@@ -91,7 +91,8 @@ def process_video():
 
             now = time.time()
             #kalman calculations (tracking and state update)
-            for t in tracks: 
+            for t in tracks: #TODO see if we should move this to be before association
+                t.predict(dt)
                 x, y, vx, vy = t.kf.statePost[:,0] #consolidate state calls
                 cov = t.kf.errorCovPost
                 #vx = t.kf.statePost[2, 0]
@@ -173,12 +174,12 @@ def process_video():
                 "frame_idx": frame_idx,
                 "track_id": t.id,
                 "detected": len(detections) is not None,
-                "centroid_x": float(t.centroids[-1],[0]),
+                "centroid_x": float(t.centroids[-1][0]),
                 "centroid_y": float(t.centroids[-1][1]),
                 "kf_vx": float(t.kf.statePost[2,0]),
                 "kf_vy": float(t.kf.statePost[3,0]),
                 "speed": float(t.speed()),
-                "missed": t.missed(),
+                "missed": t.missed,
                 #pred_x, pred_y, measurement_dx, measurement_dy
                 "dt": dt
             })

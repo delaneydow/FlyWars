@@ -16,6 +16,7 @@ class Track:
         self.missed = 0 # num of consecutive frames w/o detection
         #self.last_seen = 1 # num. of frames since last scene aka how old 
         self.last_seen = 0
+        self.alpha = 0.3
 
         # ADD KALMAN STATE
         # using initial vector [x, y, vx, vy]T
@@ -66,8 +67,6 @@ class Track:
         self.kf.processNoiseCov[1,1] = q * dt2
         self.kf.processNoiseCov[2,2] = q
         self.kf.processNoiseCov[3,3] = q 
-        # scale process noise with dt
-        #np.fill_diagonal(self.kf.processNoiseCov, q * dt * dt)
 
         pred = self.kf.predict()
         return pred[0,0], pred[1,0]
@@ -76,6 +75,15 @@ class Track:
         # prediction already happens with predicted = {t: t.predict()} in association / tracking helper
         #self.kf.predict() #ensure filter doesn't get stuck correcting a static state
         if detection is not None: 
+            # centroid stabilization
+            if len(self.centroids) > 0:
+                px, py = self.centroids[-1]
+                alpha = 0.6
+
+                detection = (
+                    alpha*detection[0] + (1-alpha)*px,
+                    alpha*detection[1] + (1-alpha)*py
+                )
             measured = np.array([[np.float32(detection[0])],
                                  [np.float32(detection[1])]])
 
@@ -88,15 +96,9 @@ class Track:
 
                 dt_eff = 2 * dt
 
-                # smoothed velocity
-                self.kf.statePost[2,0] = dx / dt_eff
-                self.kf.statePost[3,0] = dy / dt_eff
-
-                # avoid noise bootstrapping
-                #if abs(dx) + abs(dy) > 2: 
-                #    self.kf.statePost[2,0] = dx / dt
-                #    self.kf.statePost[3,0] = dy / dt
-
+                # smoothed velocity --- utilize alpha value 
+                self.kf.statePost[2,0] = (1-self.alpha) *self.kf.statePost[2,0] + self.alpha*(dx/ dt_eff)
+                self.kf.statePost[3,0] = (1-self.alpha) *self.kf.statePost[2,0] + self.alpha*(dy /dt_eff)
 
             self.kf.correct(measured)
             
@@ -107,7 +109,7 @@ class Track:
             self.last_seen +=1 #update age of detection
         else: #no detection 
             #self.centroids.append(self.centroids[-1])
-            px, py = self.predict(dt)
+            px, py = self.kf.statePost[0,0], self.kf.statePost[1,0] 
             self.centroids.append((float(px), float(py))) # have velocity persist through brief occlusion if necessary 
             self.missed += 1
             self.last_seen +=1 #needs to also increment when missed
