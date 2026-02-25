@@ -180,7 +180,6 @@ def process_video():
                 "kf_vy": float(t.kf.statePost[3,0]),
                 "speed": float(t.speed()),
                 "missed": t.missed,
-                #pred_x, pred_y, measurement_dx, measurement_dy
                 "dt": dt
             })
 
