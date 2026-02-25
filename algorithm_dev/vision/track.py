@@ -18,6 +18,10 @@ class Track:
         self.last_seen = 0
         self.alpha = 0.3
 
+        # prediction cache
+        self.cached_prediction = None
+        self.cached_k = None
+
         # ADD KALMAN STATE
         # using initial vector [x, y, vx, vy]T
         self.kf = cv2.KalmanFilter(4,2)

@@ -3,7 +3,7 @@ from planner import plan_targets
 import numpy as np
 from laser_interface import LaserInterface
 from mirror_planner import MirrorPlanner
-from object_scoring import SPOT_RADIUS_PX_SAFE
+from object_scoring import SPOT_RADIUS_PX_SAFE, predict_position
 
 # classes
 laser = LaserInterface()
@@ -14,6 +14,11 @@ LASER_ORIGIN = np.array([512, 384])  # example #TODO figure out if this is corre
 
 
 def control_step(tracks, track_states, frame_idx):
+
+    for t in tracks: 
+        pred_xy, k_eff = predict_position(t)
+        t.cached_prediction = pred_xy
+        t.cached_k = k_eff
 
     # plan targets
     plan = plan_targets(tracks, track_states, LASER_ORIGIN, frame_idx)

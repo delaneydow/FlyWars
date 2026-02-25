@@ -37,7 +37,7 @@ def plan_targets(tracks, track_states, laser_origin, frame_idx):
     fire_time = frame_idx
 
     for _, track, _ in scored: 
-        aim = predict_position(track, k=PREDICT_HORIZON)
+        aim = track.cached_prediction
 
         # add redundant points if high uncertainty 
         cov_trace = np.trace(track.kf.errorCovPost)
@@ -49,11 +49,11 @@ def plan_targets(tracks, track_states, laser_origin, frame_idx):
         for r in range(redundancy): 
             # small random jitter within spot radius
             jitter = np.random.uniform(-SPOT_RADIUS_PX_SAFE/2, SPOT_RADIUS_PX_SAFE/2, size=2)
-        plan.append({
-            "track_id": track.id,
-            "aim": aim + jitter, 
-            "fire_frame": fire_time
-        })
+            plan.append({
+                "track_id": track.id,
+                "aim": aim + jitter, 
+                "fire_frame": fire_time
+            })
         fire_time += LASER_COOLDOWN_FRAMES * redundancy
 
     return plan

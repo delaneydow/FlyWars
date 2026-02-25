@@ -20,6 +20,7 @@ class DummyKF:
         self.errorCovPost = np.diag([cov_xx, cov_yy, 1, 1])
 
 
+
 class DummyTrack: 
     def __init__(self, row): 
         self.id = int(row.track_id)
@@ -28,6 +29,9 @@ class DummyTrack:
             row.vx, row.vy,
             row.cov_xx, row.cov_yy
         )
+
+        self.cached_prediction = None
+        self.cached_k = None
 
 # === LOAD CSV ===
 
@@ -62,63 +66,92 @@ for frame_idx, frame_df in df.groupby("frame"):
     control_step(tracks, track_states, frame_idx)
 
     # ---- Prediction error analysis ----
-    future_frame = frame_idx + PREDICT_HORIZON
+    future_frame = frame_idx + int(round(PREDICT_HORIZON)) 
 
-    if future_frame in frame_lookup:
+    for t in tracks: 
+            pred_xy, k_eff = predict_position(t, k=PREDICT_HORIZON)
+            
 
-        future_df = frame_lookup[future_frame]
+            future_frame = frame_idx + int(round(k_eff))
 
-        for t in tracks:
-            # track predicted vs actual vs spot radius
-            if t.id not in future_df.index:
+            if future_frame not in frame_lookup:
                 continue
-            cov_trace = np.trace(t.kf.errorCovPost)
-            if cov_trace > MAX_COV_THRESHOLD:
-                continue # skip track
 
-            #pred_xy = predict_position(t, k=PREDICT_HORIZON)
+            future_df = frame_lookup[future_frame]
+
+            if t.id not in future_df.index: 
+                continue
 
             actual_row = future_df.loc[t.id]
             actual_xy = np.array([actual_row.x, actual_row.y])
 
+            err = np.linalg.norm(pred_xy - actual_xy)
             vx, vy = t.kf.statePost[2:, 0]
             speed = np.hypot(vx, vy)
+            prediction_speeds.append(speed)
+
              
             for k in HORIZON_RANGE: 
-                pred_xy = predict_position(t, k=k)
+
+                future_frame = frame_idx + int(round(k))
+
+                if future_frame not in frame_lookup:
+                    continue
+                if t.id not in frame_lookup[future_frame].index:
+                    continue
+
+                actual_xy = frame_lookup[future_frame].loc[t.id][["x", "y"]].values
                 err1 = np.linalg.norm(pred_xy - actual_xy)
                 horizon_results[k].append(err1)
 
-            #print("pred_xy:", pred_xy, type(pred_xy))
-            #print("actual_xy:", actual_xy, type(actual_xy))
 
-            # collect stats for k = PREDICT_HORIZON
-            pred_xy = predict_position(t, k=PREDICT_HORIZON)
-            err = np.linalg.norm(pred_xy - actual_xy)
             inside_spot = err <=SPOT_RADIUS_PX_SAFE #log whether actual was inside predicted spot
             prediction_errors.append(err)
-            prediction_speeds.append(speed)
             prediction_inside_spot.append(inside_spot)
-            inside_rate=np.mean(prediction_inside_spot)
-            for k in HORIZON_RANGE:
-                errors = np.array(horizon_results[k])
-                print(f"Horizon {k}: mean={errors.mean():.2f}, median={np.median(errors):.2f}, max={errors.max():.2f}")
+    
+    
 
+    inside_rate=np.mean(prediction_inside_spot)    
 
     elapsed = (time.perf_counter() - start) * 1000
     print(f"Frame {frame_idx}: total pipeline {elapsed:.2f} ms")
 
+# horizon summary
+for k in HORIZON_RANGE:
+                errors = np.array(horizon_results[k])
+
+                if len(errors) == 0:
+                    print(f"Horizon {k}: no samples")
+                    continue
+
+                print(
+                    f"Horizon {k}: "
+                    f"mean={errors.mean():.2f}, "
+                    f"median={np.median(errors):.2f}, "
+                    f"max={errors.max():.2f}"
+                )
+
 
 # error plotting 
 plt.figure()
-# plot extremes separately to better visualize distribution
-plt.scatter([s for s,e in zip(prediction_speeds,prediction_errors) if e<200],
-            [e for e in prediction_errors if e<200], alpha=0.3)
-plt.xlabel("Speed (px/frame)")
-plt.ylabel("Prediction error (px)")
-plt.title("Prediction error vs speed")
-plt.grid(True)
-plt.show() 
+# plot extremes separately to better visualize distribution based on paired data (not independent)
+pairs = [
+    (s, e)
+    for s, e in zip(prediction_speeds, prediction_errors)
+    if e < 200
+]
+
+if pairs:
+    speeds, errors = zip(*pairs)
+
+    plt.figure()
+    plt.scatter(speeds, errors, alpha=0.3)
+    plt.xlabel("Speed (px/frame)")
+    plt.ylabel("Prediction error (px)")
+    plt.title("Prediction error vs speed")
+    plt.grid(True)
+    plt.show()
+
 
 # plot mean error per horizon from sweep
 means = [np.mean(horizon_results[k]) for k in HORIZON_RANGE]

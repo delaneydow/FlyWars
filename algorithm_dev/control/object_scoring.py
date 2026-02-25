@@ -49,20 +49,21 @@ def predict_position(track, k=PREDICT_HORIZON):
     # acceleration estimate
         # store previous velocity in track object
         # fall back to 0 if prev_vx / prev_v not present
-    ax = (getattr(track, "prev_vx", vx) - vx) / FRAME_DT
-    ay = (getattr(track, "prev_vy", vy) - vy) / FRAME_DT
+        # eqn: a = vt - vt-1 / dt
+    ax = (vx - getattr(track, "prev_vx", vx)) / FRAME_DT
+    ay = (vy - getattr(track, "prev_vy", vy)) / FRAME_DT
 
     # update prev_vx, prev_vy for next frame
     track.prev_vx = vx
     track.prev_vy = vy
 
-    # linear * acceleration
-    x_pred = x + vx * adaptive_k + 0.5 * ax * adaptive_k**2
-    y_pred = y + vy * adaptive_k + 0.5 * ay * adaptive_k**2
+    # linear * acceleration #TODO add acceleration back when real tracker persistence exists
+    x_pred = x + vx * adaptive_k #+ 0.5 * ax * adaptive_k**2
+    y_pred = y + vy * adaptive_k #+ 0.5 * ay * adaptive_k**2
 
     
 
-    return np.array([x_pred, y_pred])
+    return np.array([x_pred, y_pred]), adaptive_k
 
 def classify_motion(speed):
     if speed < 1:
@@ -91,7 +92,11 @@ def score_track(track, state, laser_origin):
         return 0.0
 
     # predict position
-    prediction = predict_position(track)
+    prediction = getattr(track, "cached_position", None)
+
+    if prediction is None: 
+        return 0.0
+    
     distance = np.linalg.norm(prediction - laser_origin)
 
     # treat "within spot" as fully engaged
