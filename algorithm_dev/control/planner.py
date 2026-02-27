@@ -8,6 +8,7 @@ Prioritization by: sort by score, respect laser cooldown period, predict aim poi
 #planner.py
 
 from object_scoring import score_track, predict_position, PREDICT_HORIZON, MAX_COV_THRESHOLD, SPOT_RADIUS_PX_SAFE, FRAME_DT
+from algorithm_dev.vision.state_defs import *
 import numpy as np
 
 
@@ -23,19 +24,25 @@ def plan_targets(tracks, track_states, laser_origin, frame_idx):
 
     scored = []
     for t in tracks: 
-        state = track_states.get(t.id, "unknown")
+        state = track_states.get(t.id, STATE_UNKNOWN)
         score = score_track(t, state, laser_origin)
         if score > 0: 
-            scored.append((score, t, state))
+            scored.append({
+                "score": score,
+                "track": t,
+                "state": state
+            })
 
     # --- sort: hovering first, then cruising, then by score ---
-    state_priority = {"hovering": 2, "cruising": 1, "accelerating":0}
-    scored.sort(key=lambda x: (state_priority.get(x[2],0), x[0]), reverse=True)
+    state_priority = {STATE_HOVERING: 2,
+                      STATE_CRUISING: 1,
+                      STATE_ACCELERATING: 0,}
+    scored.sort(key=lambda x: (state_priority.get(x["state"], 0), x["score"]),reverse=True)
 
     plan = []
     fire_time = frame_idx
 
-    for _, track, _ in scored: 
+    for _, track, _ in scored: #TODO are vars correct here not that track is updated
         aim = predict_position(track, k=PREDICT_HORIZON)
 
         # add redundant points if high uncertainty 
@@ -51,7 +58,9 @@ def plan_targets(tracks, track_states, laser_origin, frame_idx):
             plan.append({ # ensure redundancy actually happens
                 "track_id": track.id,
                 "aim": aim + jitter, 
-                "fire_frame": fire_time
+                "fire_frame": fire_time,
+                "score": track["score"],
+                "state": track["state"]
             })
         fire_time += LASER_COOLDOWN_FRAMES * redundancy
 

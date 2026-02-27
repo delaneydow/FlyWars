@@ -5,7 +5,7 @@ import time
 class LaserInterface:
     MIN_FIRE_TIME = 0.25 # seconds
 
-    def __init__(self, port="/dev/ttyACM0", baud=115200): #port is microcontroller port
+    def __init__(self, port="/dev/serial/by-id/usb-MicroPython_Board_in_FS_mode_e6641cb2cf162f27-if00", baud=115200): #port is microcontroller port
         self.ser = serial.Serial(port, baud, timeout=1)
         time.sleep(2) #allow MCU reset
         self.ready = True
@@ -19,10 +19,5 @@ class LaserInterface:
         self.ser.flush()
         self.ready = True
 
-    def send(self, x, y):
-        """
-        Prints coordinates
-        """
-        print(f"[LASER] firing at ({x:.1f}, {y:.1f})")
 
     

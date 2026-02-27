@@ -13,7 +13,7 @@ import time
 
 
 class MirrorPlanner: 
-    def __init__(self, port="/dev/ttyUSB0", baud=115200, map_file="mirror_map1.npz", spot_radius_px=None):
+    def __init__(self, port="/dev/serial/by-id/usb-Optotune_Virtual_ComPort_3578335B3233-if00", baud=115200, map_file="mirror_map1.npz", spot_radius_px=None):
 
         # serial compatibility
         self.ser = serial.Serial(port, baud, timeout=0.01)

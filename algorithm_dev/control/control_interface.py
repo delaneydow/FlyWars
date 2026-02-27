@@ -14,9 +14,9 @@ mirror_settle_time = 0.25 # seconds, given rating of settling time + how long to
 # constants
 beam_position = np.array([512, 384])  # TODO figure out 0,0 origin, initialize once 
 
-
 def control_step(tracks, track_states, frame_idx):
     global beam_position
+    laser_fire = False
 
     # plan targets
     plan = plan_targets(tracks, track_states, beam_position, frame_idx) #TODO i think this is actually mirror, pass where mirror moved to last time it fired? 
@@ -35,7 +35,18 @@ def control_step(tracks, track_states, frame_idx):
     # fire laser on highest-priority ranked target, first planned shot per frame
     cmd = plan[0] #highest priority target #TODO see if this is right/need this
     mirror.send_uv(cmd["u"], cmd["v"]) 
-    time.sleep(mirror_settle_time) #allow for settling time before firing laser
-    laser.fire() 
+    time.sleep(mirror_settle_time) #allow for settling time before firing laser #TODO add in uncertainty?? 
+    laser.fire()
+    laser_fire = True # change flag
 
     beam_position = cmd["aim"] #stores last position of mirror
+
+    return {
+        "fired": laser_fire, #whether flag is switched or not 
+        "frame": frame_idx,
+        "track_id": cmd["track_id"],
+        "score": cmd["score"],
+        "aim_x": float(cmd["aim"][0]),
+        "aim_y": float(cmd["aim"][1]),
+    }
+

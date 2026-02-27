@@ -63,14 +63,6 @@ def predict_position(track, k=PREDICT_HORIZON):
 
     return np.array([x_pred, y_pred])
 
-def classify_motion(speed):
-    if speed < 1:
-        return "hovering"
-    elif speed < 5:
-        return "cruising"
-    else:
-        return "accelerating"
-
 
 def score_track(track, state, beam_position): 
     """ 
