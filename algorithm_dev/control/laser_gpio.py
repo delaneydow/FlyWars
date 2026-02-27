@@ -5,28 +5,67 @@ import time
 import sys
 
 
-#pin number may change
-laser = PWM(Pin(4)) # gpio04 -- function #7 on PIN #7 which is the PWM hookup
+# CONFIG
 
-# set PWM frequency (laser spec allows up to 5kHz)
-laser.freq(500) # 500 hz, safe to start TODO figure out if this needs to change
-laser.duty_u16(0) # laser OFF
+LASER_PIN = 4
+PWM_FREQ = 500          # Hz
+FIRE_DUTY = 32768       # 50% duty (0–65535)
+MIN_FIRE_TIME = 0.25    # seconds
 
-MIN_FIRE_TIME = 0.25 # seconds
 
-while True: 
-    cmd = sys.stdin.readline().strip()
+# SETUP PWM ONCE
+laser_pwm = PWM(Pin(LASER_PIN))
+laser_pwm.freq(PWM_FREQ)
+laser_pwm.duty_u16(0)   # laser OFF
+
+firing = False
+
+
+def fire_laser():
+    global firing
+
+    if firing:
+        return
+
+    firing = True
+
+    # turn laser ON
+    laser_pwm.duty_u16(FIRE_DUTY)
+
+    time.sleep(MIN_FIRE_TIME)
+
+    # turn laser OFF
+    laser_pwm.duty_u16(0)
+
+    firing = False
+
+
+# SERIAL LOOP
+while True:
+
+    cmd = sys.stdin.readline()
+
+    if not cmd:
+        continue
+
+    cmd = cmd.strip()
 
     if cmd == "FIRE":
-        laser.duty_u16(32768) #50% duty
-        time.sleep(MIN_FIRE_TIME)
-        laser.duty_u16(0) # off 
+        fire_laser()
 
-    elif cmd.startswith("DUTY"): 
-        # ex: duty 20000
-        _, val = cmd.split()
-        laser.duty_u16(int(val))
+    elif cmd.startswith("DUTY"):
+        # example: DUTY 20000
+        try:
+            _, val = cmd.split()
+            laser_pwm.duty_u16(int(val))
+        except:
+            pass
 
     elif cmd.startswith("FREQ"):
-        _, val = cmd.split()
-        laser.freq(int(val))
+        # example: FREQ 1000
+        try:
+            _, val = cmd.split()
+            laser_pwm.freq(int(val))
+        except:
+            pass
+
