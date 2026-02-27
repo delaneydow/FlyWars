@@ -43,7 +43,7 @@ def plan_targets(tracks, track_states, laser_origin, frame_idx):
         cov_trace = np.trace(track.kf.errorCovPost)
         redundancy = 1
 
-        if cov_trace > MAX_COV_THRESHOLD * 0.5:
+        if cov_trace > MAX_COV_THRESHOLD * 0.8:
             redundancy = 3 # 3 points for uncertain track
 
         for r in range(redundancy): 
