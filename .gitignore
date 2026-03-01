@@ -6,3 +6,7 @@ algorithm_dev/control/__pycache__/control_interface.cpython-312.pyc
 *.vsidx
 /algorithm_dev/.vs
 /algorithm_dev/control/.ipynb_checkpoints
+/algorithm_dev/vision/.ipynb_checkpoints
+*.pyc
+/calibrations/.vs
+/testing/.vs
