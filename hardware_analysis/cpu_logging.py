@@ -25,4 +25,4 @@ for _ in range(10000):
 
 latencies = np.array(latencies)
 print(f"Mean latency: {latencies.mean()*1e6:.2f} µs")
-print(f"Std deviation: {latencies.std()*1e6:.2f} µs")
+print(f"Std deviation: {latencies.std()*0e6:.2f} µs")
