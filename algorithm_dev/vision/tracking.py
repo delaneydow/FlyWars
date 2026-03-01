@@ -170,19 +170,6 @@ def process_video():
                     (t.speed() for t in tracks),default=0)
             })
 
-            track_debug.append({
-                "frame_idx": frame_idx,
-                "track_id": t.id,
-                "detected": len(detections) is not None,
-                "centroid_x": float(t.centroids[-1][0]),
-                "centroid_y": float(t.centroids[-1][1]),
-                "kf_vx": float(t.kf.statePost[2,0]),
-                "kf_vy": float(t.kf.statePost[3,0]),
-                "speed": float(t.speed()),
-                "missed": t.missed,
-                "dt": dt
-            })
-
 
             if cv2.waitKey(1) & 0xFF == 27:  # ESC
                 print("[INFO] ESC pressed — stopping")
@@ -195,19 +182,16 @@ def process_video():
 
        # save data frame
        df = pd.DataFrame(log_frames)
-       df.to_csv("run_005_6.csv", index=False)
+       df.to_csv("run_005_x.csv", index=False)
 
-       print(f"[INFO] Saved {len(df)} frames to run_005_6.csv") 
+       print(f"[INFO] Saved {len(df)} frames to run_005_x.csv") 
 
        df_tracks=pd.DataFrame(track_log) # save individual tracking information
-       df_tracks.to_csv("run_005_6_tracks.csv", index=False)
+       df_tracks.to_csv("run_005_x_tracks.csv", index=False)
 
        print(f"[INFO] Saved {len(df_tracks)} track states")
 
-       df_debug = pd.DataFrame(track_debug)
-       df_debug.to_csv("run_005_08_debug.csv", index=False)
-       print(f"[INFO] Saved {len(df_debug)} frames") 
     
     return latencies, det_counts, track_counts, frames, thresh_frames
         
-latencies, det_counts, track_counts, frames, thresh_frames = process_video()
+latencies, det_counts, track_counts, frames, thresh_frames = process_video() 
