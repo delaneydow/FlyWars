@@ -19,5 +19,12 @@ class LaserInterface:
         time.sleep(0.25)
         self.ready = True
 
+    def off(self): 
+        self.ready = False #prevent firing after shutdown 
+        try: 
+            self.ser.write(b"OFF\n")
+            self.ser.flush()
+        except Exception:
+            pass
 
     

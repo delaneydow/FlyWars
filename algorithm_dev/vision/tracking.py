@@ -20,7 +20,7 @@ from algorithm_dev.vision.tracking_helper import *
 
 
 #constants
-MAX_FRAMES = 1000 # save csv after 1000 frames for all experimental trials
+#MAX_FRAMES = 1000 # save csv after 1000 frames for all experimental trials
 
 # === MAIN PROCESSING LOOP ===
 
@@ -49,7 +49,7 @@ def process_video():
         while True: # stop stream after max frames, exit gracefuly 
 
             frame = camera.get_frame() # start stream
-            start_frame = time.perf_counter() #records detection speed
+            vision_start = time.perf_counter() #records detection speed
 
             now = time.time()
             # compute dt dynamically from timestamps
@@ -93,8 +93,8 @@ def process_video():
                 #if frame_idx %3 == 0: # only track every 3 frames to gauge velocity better
                 track_states[t.id] = classify_state(t) # just look every frame, trivial cost
 
-                total_frame = (time.perf_counter() - start_frame) #in seconds
-                t_total_ms = total_frame * 1000
+            # compute total frame latency once
+            vision_latency_ms = (time.perf_counter() - vision_start) * 1000
 
             if cv2.waitKey(1) & 0xFF == 27:  # ESC
                 print("[INFO] ESC pressed — stopping")
@@ -104,8 +104,9 @@ def process_video():
                 "frame": frame_idx,
                 "tracks": tracks, 
                 "states": track_states,
-                "vision_latency_ms": t_total_ms,
-                "detections": len(detections)
+                "vision_latency_ms": vision_latency_ms,
+                "detections": len(detections),
+                "timestamp": time.perf_counter()
             }
 
             prev_gray = curr_gray

@@ -105,3 +105,13 @@ class MirrorPlanner:
         if self.ser.in_waiting:
             resp = self.ser.read(self.ser.in_waiting)
             print("[Mirror response]", resp.decode(errors='ignore'))
+    
+    def off(self): 
+        print("[MIRROR] CENTER + STOP")
+        try: 
+            self.send_uv(0.0, 0.0) #use existing module to send command
+        except Exception:
+            pass
+
+    def close(self): 
+        self.ser.close() 
