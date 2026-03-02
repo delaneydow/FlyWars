@@ -6,6 +6,7 @@
 
 #imports
 import numpy as np
+from laser_interface import MIN_FIRE_TIME
 
 # tunable constants
 
@@ -28,8 +29,8 @@ laser_trigger_latency = 1 #modulation delay + thermal dwell constraint
 
 # predict horizon tied to latency 
 FRAME_DT = 1/120.0 # seconds per frame
-SYSTEM_LATENCY = 0.075 # (listed in seconds) #TODO tweak this value!!! 
-PREDICT_HORIZON =  8 #int(SYSTEM_LATENCY/FRAME_DT) # num. of frames TODO change/refine eventually
+SYSTEM_LATENCY = 0.075 + MIN_FIRE_TIME# (listed in seconds) #TODO tweak this value!!! 
+PREDICT_HORIZON =  int(SYSTEM_LATENCY/ FRAME_DT) #8 #int(SYSTEM_LATENCY/FRAME_DT) # num. of frames TODO change/refine eventually
 UNCERTAINTY_PENALTY = 0.5 
 
 # function definitions
@@ -70,22 +71,14 @@ def predict_position(track, k=PREDICT_HORIZON):
     track.prev_vx = vx
     track.prev_vy = vy
 
-    # linear * acceleration #TODO add acceleration back when real tracker persistence exists
-    x_pred = x + vx * adaptive_k #+ 0.5 * ax * adaptive_k**2
-    y_pred = y + vy * adaptive_k #+ 0.5 * ay * adaptive_k**2
+    # linear * acceleration
+    x_pred = x + vx * adaptive_k + 0.5 * ax * adaptive_k**2
+    y_pred = y + vy * adaptive_k + 0.5 * ay * adaptive_k**2
 
-    return np.array([x_pred, y_pred]), adaptive_k
-
-def classify_motion(speed):
-    if speed < 1:
-        return "hovering"
-    elif speed < 5:
-        return "cruising"
-    else:
-        return "accelerating"
+    return np.array([x_pred, y_pred])
 
 
-def score_track(track, state, laser_origin): 
+def score_track(track, state, beam_position): 
     """ 
     Returns priority score, higher = better target
     """
@@ -111,6 +104,9 @@ def score_track(track, state, laser_origin):
     
     stability = np.exp(-UNCERTAINTY_PENALTY * uncertainty)
 
+    # predict position #TODO I DON'T THINK THIS IS RIGHT
+    prediction = predict_position(track)
+    distance = np.linalg.norm(prediction - beam_position)
 
     # === mirror travel cost === 
     mirror_delta = np.linalg.norm(prediction - laser_origin)

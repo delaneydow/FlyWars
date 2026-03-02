@@ -1,19 +1,22 @@
 # control_interface.py
 from planner import plan_targets, LASER_COOLDOWN_FRAMES
 import numpy as np
+import time
 from laser_interface import LaserInterface
 from mirror_planner import MirrorPlanner
 from object_scoring import SPOT_RADIUS_PX_SAFE, PREDICT_HORIZON, predict_position
 
 # classes
 laser = LaserInterface()
-mirror = MirrorPlanner(map_file="mirror_map1.npz", spot_radius_px=SPOT_RADIUS_PX_SAFE)  
+mirror = MirrorPlanner(map_file="mirror_map1.npz", spot_radius_px=SPOT_RADIUS_PX_SAFE) 
+mirror_settle_time = 0.25 # seconds, given rating of settling time + how long to switch directions (avg.) 
 
 # constants
-LASER_ORIGIN = np.array([512, 384])  # example #TODO figure out if this is correct or not (measure in reality)
-
+beam_position = np.array([512, 384])  # TODO figure out 0,0 origin, initialize once 
 
 def control_step(tracks, track_states, frame_idx):
+    global beam_position
+    laser_fire = False
 
     for t in tracks: 
 
@@ -23,7 +26,7 @@ def control_step(tracks, track_states, frame_idx):
         t.cached_k = k_eff
 
     # plan targets
-    plan = plan_targets(tracks, track_states, LASER_ORIGIN, frame_idx)
+    plan = plan_targets(tracks, track_states, beam_position, frame_idx) #TODO i think this is actually mirror, pass where mirror moved to last time it fired? 
 
     if not plan:
         return #do nothing for frame
@@ -36,11 +39,21 @@ def control_step(tracks, track_states, frame_idx):
         cmd["u"] = u
         cmd["v"] = v
 
-    # fire laser on highest-priority ranked target
+    # fire laser on highest-priority ranked target, first planned shot per frame
+    cmd = plan[0] #highest priority target #TODO see if this is right/need this
+    mirror.send_uv(cmd["u"], cmd["v"]) 
+    time.sleep(mirror_settle_time) #allow for settling time before firing laser #TODO add in uncertainty?? 
+    laser.fire()
+    laser_fire = True # change flag
 
-    #if uncertainty > threshold: #TODO establish these params
-    #    return 
+    beam_position = cmd["aim"] #stores last position of mirror
 
-    # fire only the first planned shot per frame
-    cmd = plan[0]
-    laser.fire(cmd["aim"]) #TODO : can also fire using mirror UV mayve
+    return {
+        "fired": laser_fire, #whether flag is switched or not 
+        "frame": frame_idx,
+        "track_id": cmd["track_id"],
+        "score": cmd["score"],
+        "aim_x": float(cmd["aim"][0]),
+        "aim_y": float(cmd["aim"][1]),
+    }
+

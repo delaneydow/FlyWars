@@ -8,12 +8,17 @@
 
 import numpy as np
 from matplotlib.path import Path as MplPath
-#import pyserial # for access with mre-3 serial port 
+import serial # for access with mre-3 serial port 
+import time
 
 
 class MirrorPlanner: 
-    def __init__(self, map_file="mirror_map1.npz", spot_radius_px=None):
+    def __init__(self, port="/dev/serial/by-id/usb-Optotune_Virtual_ComPort_3578335B3233-if00", baud=115200, map_file="mirror_map1.npz", spot_radius_px=None):
 
+        # serial compatibility
+        self.ser = serial.Serial(port, baud, timeout=0.01)
+
+        # viable mirror points
         data = np.load(map_file)
 
         # calibrations samples
@@ -77,3 +82,26 @@ class MirrorPlanner:
             np.clip(self.u_map[idx], self.u_min, self.u_max),
             np.clip(self.v_map[idx], self.v_min, self.v_max)
         )
+    
+    def send_uv(self, u, v): 
+
+        " Send U/V coordinates as X/Y commands to MRE-3 via USB serial "
+        "MRE-3 Expects X and Y within range -1.0 to 1.0 (already calibrated for)"
+
+
+        # Clamp values just to be safe
+        u = float(np.clip(u, -1.0, 1.0))
+        v = float(np.clip(v, -1.0, 1.0))
+
+        # Proper command format
+        cmd_x = f"X={u:.3f}\r\n"
+        cmd_y = f"Y={v:.3f}\r\n"
+
+        # Send to serial port
+        self.ser.write(cmd_x.encode())
+        self.ser.write(cmd_y.encode())
+
+        # Optional: read echo / status
+        if self.ser.in_waiting:
+            resp = self.ser.read(self.ser.in_waiting)
+            print("[Mirror response]", resp.decode(errors='ignore'))

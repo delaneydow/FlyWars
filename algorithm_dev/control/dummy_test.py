@@ -69,9 +69,8 @@ for frame_idx, frame_df in df.groupby("frame"):
     future_frame = frame_idx + int(round(PREDICT_HORIZON)) 
 
     for t in tracks: 
-            #pred_xy, k_eff = predict_position(t, k=PREDICT_HORIZON)
-            pred_xy = t.cached_prediction
-            k_eff = t.cached_k
+            pred_xy, k_eff = predict_position(t, k=PREDICT_HORIZON)
+            
 
             future_frame = frame_idx + int(round(k_eff))
 
@@ -87,7 +86,7 @@ for frame_idx, frame_df in df.groupby("frame"):
             actual_xy = np.array([actual_row.x, actual_row.y])
 
             err = np.linalg.norm(pred_xy - actual_xy)
-            vx, vy = t.kf.statePost[2:, 0] #TODO why are we calculating this _ speed ehre??
+            vx, vy = t.kf.statePost[2:, 0]
             speed = np.hypot(vx, vy)
             prediction_speeds.append(speed)
 
@@ -109,6 +108,8 @@ for frame_idx, frame_df in df.groupby("frame"):
             inside_spot = err <=SPOT_RADIUS_PX_SAFE #log whether actual was inside predicted spot
             prediction_errors.append(err)
             prediction_inside_spot.append(inside_spot)
+    
+    
 
     inside_rate=np.mean(prediction_inside_spot)    
 
