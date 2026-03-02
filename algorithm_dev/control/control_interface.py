@@ -1,10 +1,10 @@
 # control_interface.py
-from planner import plan_targets, LASER_COOLDOWN_FRAMES
+from algorithm_dev.control.planner import plan_targets, LASER_COOLDOWN_FRAMES
 import numpy as np
 import time
-from laser_interface import LaserInterface
-from mirror_planner import MirrorPlanner
-from object_scoring import SPOT_RADIUS_PX_SAFE, PREDICT_HORIZON, predict_position
+from algorithm_dev.control.laser_interface import LaserInterface
+from algorithm_dev.control.mirror_planner import MirrorPlanner
+from algorithm_dev.control.object_scoring import SPOT_RADIUS_PX_SAFE, PREDICT_HORIZON, predict_position
 
 # classes
 laser = LaserInterface()

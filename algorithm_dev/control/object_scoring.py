@@ -6,7 +6,6 @@
 
 #imports
 import numpy as np
-from laser_interface import MIN_FIRE_TIME
 
 # tunable constants
 
@@ -19,6 +18,7 @@ MM_PER_PX = 0.533 # mm per pixel
 SPOT_RADIUS_PX = SPOT_RADIUS_MM / MM_PER_PX
 CALIBRATION_ERROR_FACTOR = 1.05 # 5% error margin
 SPOT_RADIUS_PX_SAFE = SPOT_RADIUS_MM * CALIBRATION_ERROR_FACTOR
+MIN_FIRE_TIME = 0.25 #seconds
 
 # latency detection (in ms)
 camera_latency = 1# exposure + sensor readout + gigE transfer + driver buffering

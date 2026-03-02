@@ -1,8 +1,8 @@
 import pandas as pd
 import time
 
-from control_interface import control_step
-from cooldown import *
+from algorithm_dev.control.control_interface import control_step
+from algorithm_dev.control.cooldown import *
 
 # import Tracking pipeline
 from algorithm_dev.vision.track import Track #import Track class, TODO see if track needs to be passed/accessed
@@ -58,4 +58,4 @@ def main():
    #TODO maybe occasionally print updates
 
 if __name__=="__main__": 
-    main()
+        main()

@@ -1,7 +1,6 @@
 ﻿import cv2
-from track import Track
+from algorithm_dev.vision.track import Track
 import numpy as np
-from track import Track
 from scipy.optimize import linear_sum_assignment
 
 

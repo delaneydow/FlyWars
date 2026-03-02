@@ -4,7 +4,7 @@
 
 import numpy as np
 
-from state_defs import *
+from algorithm_dev.vision.state_defs import *
 
 
 # define functions

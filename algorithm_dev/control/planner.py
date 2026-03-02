@@ -7,7 +7,7 @@ Prioritization by: sort by score, respect laser cooldown period, predict aim poi
 
 #planner.py
 
-from object_scoring import score_track, predict_position, PREDICT_HORIZON, MAX_COV_THRESHOLD, SPOT_RADIUS_PX_SAFE, FRAME_DT
+from algorithm_dev.control.object_scoring import score_track, predict_position, PREDICT_HORIZON, MAX_COV_THRESHOLD, SPOT_RADIUS_PX_SAFE, FRAME_DT
 from algorithm_dev.vision.state_defs import *
 import numpy as np
 
