@@ -39,17 +39,14 @@ def emergency_stop(signum, frame):
 
     print("\n[EMERGENCY STOP]")
 
-    try:
-        if laser:
-            laser.off()
-            laser.ser.close()
+    if laser:
+        laser.off()
+        laser.ser.close()
 
-        if mirror:
-            mirror.off()
-            mirror.close()
+    if mirror:
+        mirror.off()
+        mirror.close()
 
-    finally:
-        sys.exit(0)
 
 
 # main control/ pipeline
@@ -77,9 +74,11 @@ def main():
 
             if now - last_packet_time > WATCHDOG_TIMEOUT:
                 print("[WATCHDOG] Vision timeout")
-                laser.off()
-                mirror.off()
-            
+                if laser:
+                    laser.off()
+                if mirror: 
+                    mirror.off()
+
             last_packet_time = now #system kills on lag 
 
             while PAUSED:
@@ -125,6 +124,7 @@ def main():
     finally: 
         emergency_stop(None, None) #shutdown as default 
         print ("emergency stop completed.")
+        sys.exit(0)
 
 if __name__=="__main__": 
         main()
