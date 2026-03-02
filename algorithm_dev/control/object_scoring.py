@@ -44,14 +44,28 @@ def predict_position(track, k=PREDICT_HORIZON):
     vx, vy = track.kf.statePost[2,0], track.kf.statePost[3,0]
     speed = np.hypot(vx, vy)
 
+    # velocity damping 
+    if speed < 2:
+        vx *= 0.6
+        vy *= 0.6
+
+    # clamp velocity for slow targets: 
+    if speed < 1.0: 
+        adaptive_k = 1.0 #nearly current position
+    elif speed < 5.0: 
+        adaptive_k = k * 0.6 #fast moving
+    else: 
+        adaptive_k = k * 1.0
+
     # Adaptive horizon scaling -- longer horizon for faster objects 
-    adaptive_k = k * min(1.5, max(0.5, speed / 5.0))
+    #adaptive_k = k * min(1.5, max(0.5, speed / 5.0)) #TODO figure out how to balance this 
 
     # acceleration estimate
         # store previous velocity in track object
         # fall back to 0 if prev_vx / prev_v not present
-    ax = (getattr(track, "prev_vx", vx) - vx) / FRAME_DT
-    ay = (getattr(track, "prev_vy", vy) - vy) / FRAME_DT
+        # eqn: a = vt - vt-1 / dt
+    ax = (vx - getattr(track, "prev_vx", vx)) / FRAME_DT
+    ay = (vy - getattr(track, "prev_vy", vy)) / FRAME_DT
 
     # update prev_vx, prev_vy for next frame
     track.prev_vx = vx
@@ -66,46 +80,58 @@ def predict_position(track, k=PREDICT_HORIZON):
 
 def score_track(track, state, beam_position): 
     """ 
-    Returns priority score, higher = more urgent
+    Returns priority score, higher = better target
     """
 
-    # account for position + velocity
-    vx, vy = track.kf.statePost[2:, 0]
-    speed=np.hypot(vx, vy)
+    #TODO look into distance scoring + improve further
+    # priority = interceptability x stability x engagement payoff 
+
+    # === predict position ===
+    prediction = getattr(track, "cached_prediction", None)
+
+    if prediction is None: 
+        return 0.0
     
-    # uncertainty (trace of covariance)
+    prediction = np.asarray(prediction)
+
+    # === uncertainty filter === 
+    
     cov = track.kf.errorCovPost
     uncertainty = cov[0,0] + cov[1,1]
 
-    #filter out high-uncertaint tracks (skip scoring)
     if uncertainty > MAX_COV_THRESHOLD: 
-        return 0.0
+        return 0.0 
+    
+    stability = np.exp(-UNCERTAINTY_PENALTY * uncertainty)
 
     # predict position #TODO I DON'T THINK THIS IS RIGHT
     prediction = predict_position(track)
     distance = np.linalg.norm(prediction - beam_position)
 
-    # treat "within spot" as fully engaged
-    if distance <= SPOT_RADIUS_PX_SAFE:
-        distance_weight = 1.0 # no penalty
-    else: 
-        distance_weight = SPOT_RADIUS_PX_SAFE / distance # decays smoothly 
+    # === mirror travel cost === 
+    mirror_delta = np.linalg.norm(prediction - laser_origin)
 
-    # if distance is outside of engage radius i.e. not within range 
-    if distance > ENGAGE_RADIUS: 
-        return 0.0
+    mirror_cost = 1.0 / (1.0+ mirror_delta) #TODO figure out if this is necessary 
 
-    # continous weighting
-    state_weight = np.clip(speed / 10.0, 0.2, 1.0)
-    # motion state weighting
-    #state_weight = {
-     #   "flying": 1.0, 
-      #  "hovering": 0.5, 
-       # "accelerating": 0.1,
-    #}.get(state, 0.3)
+    # === motion state weighting (hovering first) === 
+    vx, vy = track.kf.statePost[2:,0]
+    speed = np.hypot(vx, vy) 
+    #speed = track.speed()
 
-    score = (state_weight * speed / (1.0 + distance * 0.05) * np.exp(-UNCERTAINTY_PENALTY * uncertainty))
-    score = score * distance_weight
+    state_weight = {
+        "hovering": 1.3, 
+        "cruising": 0.9, 
+        "accelerating": 0.5,
+    }.get(state, 0.5) 
+
+    # speed penality 
+    speed_penalty = 1.0 / (1.0 + speed)
+  
+    # === final score ==
+
+    score = (
+        mirror_cost * state_weight * stability * speed_penalty # * commitment * cluster_bonus
+    )
     
     return float(score)
 

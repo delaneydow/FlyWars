@@ -20,6 +20,7 @@ class DummyKF:
         self.errorCovPost = np.diag([cov_xx, cov_yy, 1, 1])
 
 
+
 class DummyTrack: 
     def __init__(self, row): 
         self.id = int(row.track_id)
@@ -56,7 +57,7 @@ for frame_idx, frame_df in df.groupby("frame"):
 
     tracks = [DummyTrack(r) for _, r in frame_df.iterrows()]
     track_states = {
-    int(r.track_id): classify_motion(
+    int(r.track_id): classify_motion( #TODO should we just pull "state" from here instead or not really rely
         np.hypot(r.vx, r.vy)
     )
     for _, r in frame_df.iterrows()

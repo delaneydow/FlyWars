@@ -1,9 +1,14 @@
-<<<<<<< Updated upstream
 algorithm_dev/control/__pycache__/laser_interface.cpython-312.pyc
 algorithm_dev/control/__pycache__/mirror_planner.cpython-312.pyc
 algorithm_dev/control/__pycache__/object_scoring.cpython-312.pyc
 algorithm_dev/control/__pycache__/planner.cpython-312.pyc
 algorithm_dev/control/__pycache__/control_interface.cpython-312.pyc
-=======
+*.vsidx
+/algorithm_dev/.vs
+/algorithm_dev/control/.ipynb_checkpoints
+/algorithm_dev/vision/.ipynb_checkpoints
 *.pyc
->>>>>>> Stashed changes
+/calibrations/.vs
+/testing/.vs
+algorithm_dev/LUCID_TRI032S-M_251700592__20251114112116359_video3.avi
+algorithm_dev/vision/LUCID_TRI032S-M_251700592__20251114112116359_video3.avi

@@ -73,68 +73,51 @@ def detect_moving_objects_fast(prev_gray, curr_gray):
     return detections, thresh
 
 
-def associate_detections_to_tracking_fast(detections, tracks, next_id, dt):
+def associate_detections_to_tracking_fast(detections, tracks, next_id): #TODO take out dt 
 
-    #  === SWITCHING TO HUNGARIAN ALGORITHM ===
-    
-    # USING EARLY-EXIT GATED REPLACEMENT
+    # CASE 1: NO DETECTIONS
     if not detections: 
         for t in tracks: 
-            t.update(None, dt)
+            t.update(None)
         return [t for t in tracks if t.missed <= MAX_MISSED], next_id
 
     used = [False] * len(detections)
-    # dynamic gating based on velocity
-    #max_dist_sq = MAX_TRACK_DIST * MAX_TRACK_DIST
+    track_matches = {}
+
+    # CASE 2: find best detection per track via fast gated nearest neighbor
     
+    # fast gated nearest neighbor,
+    for ti, t in enumerate(tracks):
+        px, py = t.last_position
+        best_i = -1
+        best_dist = MAX_TRACK_DIST*MAX_TRACK_DIST
 
-    predicted = np.array([t.predict(dt) for t in tracks], dtype=np.float32)
-    detections_np = np.array(detections, dtype=np.float32)
+        for di, d in enumerate(detections):
+            if used[di]:
+                continue
 
-    if len(predicted) and len(detections_np): 
+            dx = px - d[0]
+            dy = py - d[1]
+            dist = dx*dx + dy*dy
 
-        # squared distance matrix (FAST vectorized) 
-        diff = predicted[:, None, :] - detections_np[None, :, :]
-        cost = np.sum(diff *2, axis=2) #squared euclidian distance
+            if dist < best_dist:
+                best_dist = dist
+                best_i = di
 
-        # hard gating for speed + stability
-        #cost[cost > MAX_TRACK_DIST**2] = 1e6 #TODO replacing this velocity 
+        if best_i >=0:
+            track_matches[ti] = best_i
+            used[best_i] = True
+        else:
+            t.update(None)
 
-        # trying dynamic distance gating per track
-        for i, t in enumerate(tracks): 
-            #estimate max expected movement this frame
-            vmax = t.speed() * dt
-            allowed_dist_sq = max(MAX_TRACK_DIST**2, (vmax*2)**2) # vmax as safety factor both for fast/slow
-            # apply gating
-            cost[i, cost[i,:], allowed_dist_sq] = 1e6
+    # CASE 3: create new tracks
+    for di, d in enumerate(detections): 
+        if not used[di] and len(tracks) < MAX_TRACKS:
+            tracks.append(Track(next_id, d))
+            next_id += 1
 
-
-        rows, cols = linear_sum_assignment(cost)
-
-        assigned_tracks= set()
-        assigned_dets=set()
-
-        for r, c in zip(rows, cols): 
-            if cost[r,c] < MAX_TRACK_DIST**2:
-                tracks[r].update(detections[c], dt)
-                assigned_tracks.add(r)
-                assigned_dets.add(c)
-
-        #unmatched tracks 
-        for i, t in enumerate(tracks): 
-            if i not in assigned_tracks:
-                t.update(None, dt)
-
-        # unmatched detections --> new tracks
-        for i, d in enumerate(detections): 
-            if i not in assigned_dets and len(tracks) < MAX_TRACKS: 
-                tracks.append(Track(next_id, d))
-                next_id +=1
-    else: 
-        for t in tracks:
-            t.update(None,dt)
-    
-    # remove and prune old tracks
+       
+    # CASE 4: remove and prune old tracks
     tracks = [t for t in tracks if t.missed <=MAX_MISSED]
 
     return tracks, next_id
@@ -155,9 +138,7 @@ def deduplicate_tracks(tracks, radius=15, vel_thresh=50): #TODO FIX THIS TO IMPR
     for t in tracks: 
         x, y = t.last_position
         key = (x // radius, y // radius)
-
-        vx1, vy1 = t.kf.statePost[2:, 0]
-
+        
         duplicate = False
 
         # check in neighbording bins
@@ -171,19 +152,18 @@ def deduplicate_tracks(tracks, radius=15, vel_thresh=50): #TODO FIX THIS TO IMPR
                 k = grid[neighbor_key]
 
                 # get spatial distance
-                #dist = np.linalg.norm(np.array(t.last_position) - np.array(k.last_position))
-                dist_sq = (t.last_position[0] - k.last_position[0])**2 + (t.last_position[1] - k.last_position[1])**2
-                if dist_sq < radius**2:
-                    vel_diff = np.hypot(vx1 - vx2, vy1 - vy2)
-                    if vel_diff < vel_thresh:
-                        duplicate = True
+                dxp = t.last_position[0] - k.last_position[0]
+                dyp = t.last_position[1] - k.last_position[1]
+                dist_sq = dxp*dxp + dyp*dyp
 
-                if dist_sq > radius: #TODO check that this should be dist_sq then? 
+                if dist_sq > radius**2: 
                     continue
 
                 # velocity similarity check
+                vx1, vy1 = t.kf.statePost[2:, 0]
                 vx2, vy2 = k.kf.statePost[2:,0]
-                vel_diff = np.hypot(vx1 - vx2, vy1 - vy2)
+
+                vel_diff = np.hypot(vx1 - vx2, vy1 - vy2) 
 
                 if vel_diff < vel_thresh: 
                     duplicate = True

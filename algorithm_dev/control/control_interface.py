@@ -1,10 +1,10 @@
 # control_interface.py
-from planner import plan_targets
+from planner import plan_targets, LASER_COOLDOWN_FRAMES
 import numpy as np
 import time
 from laser_interface import LaserInterface
 from mirror_planner import MirrorPlanner
-from object_scoring import SPOT_RADIUS_PX_SAFE
+from object_scoring import SPOT_RADIUS_PX_SAFE, PREDICT_HORIZON, predict_position
 
 # classes
 laser = LaserInterface()
@@ -17,6 +17,13 @@ beam_position = np.array([512, 384])  # TODO figure out 0,0 origin, initialize o
 def control_step(tracks, track_states, frame_idx):
     global beam_position
     laser_fire = False
+
+    for t in tracks: 
+
+        fire_delay = LASER_COOLDOWN_FRAMES
+        pred_xy, k_eff = predict_position(t, k=PREDICT_HORIZON + fire_delay)
+        t.cached_prediction = pred_xy
+        t.cached_k = k_eff
 
     # plan targets
     plan = plan_targets(tracks, track_states, beam_position, frame_idx) #TODO i think this is actually mirror, pass where mirror moved to last time it fired? 
