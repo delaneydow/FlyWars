@@ -1,10 +1,10 @@
-import pandas as pd
+﻿import pandas as pd
 import time
 import signal
 import sys
 
 from algorithm_dev.control.control_interface import control_step
-from algorithm_dev.control.cooldown import *
+from algorithm_dev.control.cooldown import get_cpu_temp, adaptive_cooldown
 
 # import Tracking pipeline
 from algorithm_dev.vision.track import Track #import Track class, TODO see if track needs to be passed/accessed
@@ -52,26 +52,63 @@ def emergency_stop(signum, frame):
 # main control/ pipeline
 def main(): 
 
-    global mirror, laser 
-    laser = LaserInterface()
-    mirror = MirrorPlanner() 
+    global mirror, laser , PAUSED
 
-    signal.signal(signal.SIGINT, emergency_stop) #CTRL+C is controlled shutdown 
-    signal.signal(signal.SIGUSR1, toggle_pause) #PID from ps aux | grep main.py, kill / resume -USR1 <PID>
+    print("[SYSTEM] Initializing hardware...")
 
+    # camera set up
+    try:
+        from algorithm_dev.vision.camera_interface import Camera
+        cam = Camera()
+        test_frame = cam.get_frame()
+        if test_frame is None:
+            raise RuntimeError("Camera returned no frames")
+        print("[CAMERA] OK")
+    except Exception as e:
+        print("[CAMERA] FAIL:", e)
+        cam = None
 
-    writer = Writer() 
+    # laser setup 
+    try:
+        laser = LaserInterface()  # initialize serial interface
+        laser.off()  # ensure it starts off
+        print("[LASER] OK")
+    except Exception as e:
+        print("[LASER] FAIL:", e)
+        laser = None
+
+    # mirror set up
+    try:
+        mirror = MirrorPlanner()  # initialize mirror
+        mirror.off()  # ensure safe start
+        print("[MIRROR] OK")
+    except Exception as e:
+        print("[MIRROR] FAIL:", e)
+        mirror = None
+
+    # hardware check
+    if not all([cam, laser, mirror]):
+        print("\n[SYSTEM] One or more subsystems failed to initialize. Exiting.")
+        sys.exit(1)
+
+    # signal handling
+    signal.signal(signal.SIGINT, emergency_stop)      # CTRL+C (controlled shutdown)
+    signal.signal(signal.SIGUSR1, toggle_pause)       # custom pause/resume; PID from ps aux | grep main.py, kill / resume -USR1 <PID>
+
+    # writing set up
+    writer = Writer()
+  
     # === CALL VISION LOOP ===
+    last_packet_time = time.perf_counter()
+    WATCHDOG_TIMEOUT = 0.1 #100 ms, deadman watchdog
     
     try: 
 
-        last_packet_time = time.perf_counter()
-        WATCHDOG_TIMEOUT = 0.1 #100 ms, deadman watchdog 
-    
         for packet in process_video(): 
 
             now = time.perf_counter()
 
+            # watch dog, if vision stalls then turn off system
             if now - last_packet_time > WATCHDOG_TIMEOUT:
                 print("[WATCHDOG] Vision timeout")
                 if laser:
@@ -81,6 +118,7 @@ def main():
 
             last_packet_time = now #system kills on lag 
 
+            # pause handling 
             while PAUSED:
                 if laser: 
                     laser.off()
@@ -89,13 +127,13 @@ def main():
                 time.sleep(0.1)
 
 
-            # run control
+            # CONTROL STEP 
             pipeline_start = packet["timestamp"] # starting time 
             result = control_step(packet["tracks"],
                                 packet["states"],
                                 packet["frame"]) 
 
-            #thermal monitoring
+            #CPU / thermal monitoring (from cooldown.py)
             cpu_temp = get_cpu_temp()
             cooldown = adaptive_cooldown(cpu_temp)
 
