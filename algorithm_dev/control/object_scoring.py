@@ -104,12 +104,8 @@ def score_track(track, state, beam_position):
     
     stability = np.exp(-UNCERTAINTY_PENALTY * uncertainty)
 
-    # predict position #TODO I DON'T THINK THIS IS RIGHT
-    prediction = predict_position(track)
-    distance = np.linalg.norm(prediction - beam_position)
-
     # === mirror travel cost === 
-    mirror_delta = np.linalg.norm(prediction - laser_origin)
+    mirror_delta = np.linalg.norm(prediction - beam_position)
 
     mirror_cost = 1.0 / (1.0+ mirror_delta) #TODO figure out if this is necessary 
 

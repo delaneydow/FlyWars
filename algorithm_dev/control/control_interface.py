@@ -7,16 +7,20 @@ from algorithm_dev.control.mirror_planner import MirrorPlanner
 from algorithm_dev.control.object_scoring import SPOT_RADIUS_PX_SAFE, PREDICT_HORIZON, predict_position
 
 # classes
-laser = LaserInterface()
-mirror = MirrorPlanner(map_file="mirror_map1.npz", spot_radius_px=SPOT_RADIUS_PX_SAFE) 
-mirror_settle_time = 0.25 # seconds, given rating of settling time + how long to switch directions (avg.) 
+mirror_settle_time = 0.025 # 25ms, given rating of settling time + how long to switch directions (avg.) 
 
 # constants
 beam_position = np.array([512, 384])  # TODO figure out 0,0 origin, initialize once 
 
-def control_step(tracks, track_states, frame_idx):
+def control_step(tracks, track_states, frame_idx, laser, mirror):
     global beam_position
     laser_fire = False
+
+    print(f"[CONTROL] {len(tracks)} tracks, {len(track_states)} states")
+
+    if not tracks:
+        print("[CONTROL] no tracks, skipping")
+        return None
 
     for t in tracks: 
 
@@ -29,7 +33,8 @@ def control_step(tracks, track_states, frame_idx):
     plan = plan_targets(tracks, track_states, beam_position, frame_idx) #TODO i think this is actually mirror, pass where mirror moved to last time it fired? 
 
     if not plan:
-        return #do nothing for frame
+        print("[CONTROL] planner returned empty, skipping")
+        return None #do nothing for frame
     
     # attach mirror commands
     for cmd in plan: 
@@ -44,6 +49,7 @@ def control_step(tracks, track_states, frame_idx):
     mirror.send_uv(cmd["u"], cmd["v"]) 
     time.sleep(mirror_settle_time) #allow for settling time before firing laser #TODO add in uncertainty?? 
     laser.fire()
+    print(f"[CONTROL] firing at {plan[0]['aim']}")
     laser_fire = True # change flag
 
     beam_position = cmd["aim"] #stores last position of mirror

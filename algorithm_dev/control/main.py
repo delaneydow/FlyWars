@@ -5,6 +5,7 @@ import sys
 
 from algorithm_dev.control.control_interface import control_step
 from algorithm_dev.control.cooldown import get_cpu_temp, adaptive_cooldown
+from algorithm_dev.control.object_scoring import SPOT_RADIUS_PX_SAFE
 
 # import Tracking pipeline
 from algorithm_dev.vision.track import Track #import Track class, TODO see if track needs to be passed/accessed
@@ -79,7 +80,7 @@ def main():
 
     # mirror set up
     try:
-        mirror = MirrorPlanner()  # initialize mirror
+        mirror = MirrorPlanner(map_file="mirror_map1.npz", spot_radius_px = SPOT_RADIUS_PX_SAFE)  # initialize mirror
         mirror.off()  # ensure safe start
         print("[MIRROR] OK")
     except Exception as e:
@@ -135,35 +136,40 @@ def main():
                 pipeline_start = packet["timestamp"] # starting time 
                 result = control_step(packet["tracks"],
                                 packet["states"],
-                                packet["frame"]) 
+                                packet["frame"],
+                                laser,
+                                mirror)
+
+                #CPU / thermal monitoring (from cooldown.py)
+                cpu_temp = get_cpu_temp()
+                cooldown = adaptive_cooldown(cpu_temp)
+
+                # TODO figure out if I should send cooldown to planning or not? 
+                if cooldown > 0: 
+                    time.sleep(cooldown)
+
+                total_pipeline_ms = (time.perf_counter() - pipeline_start) * 1000 #ms
+
+                writer.log_frame({
+                    "frame": packet["frame"],
+                    "time": time.time(),
+                    "vision_latency": packet["vision_latency_ms"],
+                    "pipeline_latency": total_pipeline_ms,
+                    "ndet": packet["detections"],
+                    "ntrack": len(packet["tracks"]),
+                    "temp": cpu_temp,
+                    "cooldown": cooldown
+                })
+
+                writer.log_fire(result)
+
             except Exception as e: 
-                print ("\n[CONTROL ERROR")
+                print(f"\[LOOP ERROR]: {e}")
                 import traceback
                 traceback.print_exc()
-                raise
-
-            #CPU / thermal monitoring (from cooldown.py)
-            cpu_temp = get_cpu_temp()
-            cooldown = adaptive_cooldown(cpu_temp)
-
-            # TODO figure out if I should send cooldown to planning or not? 
-            if cooldown > 0: 
-                time.sleep(cooldown)
-
-            total_pipeline_ms = (time.perf_counter() - pipeline_start) * 1000 #ms
-
-            writer.log_frame({
-                "frame": packet["frame"],
-                "time": time.time(),
-                "vision_latency": packet["vision_latency_ms"],
-                "pipeline_latency": total_pipeline_ms,
-                "ndet": packet["detections"],
-                "ntrack": len(packet["tracks"]),
-                "temp": cpu_temp,
-                "cooldown": cooldown
-            })
-
-            writer.log_fire(result)
+                if laser: laser.off()
+                if mirror: mirror.off()
+                continue #always continue, don't let single frame kill stream
 
         #TODO maybe df of quick/final stats (i.e. save off total fire_count among other variables)     
 

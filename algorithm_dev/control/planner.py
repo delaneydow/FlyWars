@@ -7,9 +7,11 @@ Prioritization by: sort by score, respect laser cooldown period, predict aim poi
 
 #planner.py
 
-from algorithm_dev.control.object_scoring import score_track, predict_position, PREDICT_HORIZON, MAX_COV_THRESHOLD, SPOT_RADIUS_PX_SAFE, FRAME_DT
-from algorithm_dev.vision.state_defs import *
+
 import numpy as np
+from algorithm_dev.control.object_scoring import(
+        score_track, predict_position, PREDICT_HORIZON, MAX_COV_THRESHOLD, SPOT_RADIUS_PX_SAFE, FRAME_DT)
+from algorithm_dev.vision.state_defs import *
 
 
 # === DECLARE CONSTANTS ===
@@ -17,7 +19,7 @@ LASER_COOLDOWN_FRAMES = int(0.25/ FRAME_DT) # minimum firing time / FPS
 
 # === DEFINE FUNCTIONS ===
 
-def plan_targets(tracks, track_states, laser_origin, frame_idx): 
+def plan_targets(tracks, track_states, beam_position, frame_idx): 
     """ 
     Generate planned shots, including redundancy within spot radius 
     """
@@ -25,13 +27,15 @@ def plan_targets(tracks, track_states, laser_origin, frame_idx):
     scored = []
     for t in tracks: 
         state = track_states.get(t.id, STATE_UNKNOWN)
-        score = score_track(t, state, laser_origin)
+        score = score_track(t, state, beam_position)
         if score > 0: 
             scored.append({
                 "score": score,
                 "track": t,
                 "state": state
             })
+    if not scored: 
+        return []
 
     # --- sort: hovering first, then cruising, then by score ---
     state_priority = {STATE_HOVERING: 2,
@@ -42,25 +46,24 @@ def plan_targets(tracks, track_states, laser_origin, frame_idx):
     plan = []
     fire_time = frame_idx
 
-    for _, track, _ in scored: #TODO are vars correct here not that track is updated
+    for item in scored: #TODO are vars correct here not that track is updated
+        track = item["track"]
         aim = predict_position(track, k=PREDICT_HORIZON)
 
         # add redundant points if high uncertainty 
         cov_trace = np.trace(track.kf.errorCovPost)
-        redundancy = 1
 
-        if cov_trace > MAX_COV_THRESHOLD * 0.8:
-            redundancy = 3 # 3 points for uncertain track
+        redundancy = 3 if cov_trace > MAX_COV_THRESHOLD * 0.8 else 1
 
-        for r in range(redundancy): 
+        for _ in range(redundancy): 
             # small random jitter within spot radius
             jitter = np.random.uniform(-SPOT_RADIUS_PX_SAFE/2, SPOT_RADIUS_PX_SAFE/2, size=2)
             plan.append({ # ensure redundancy actually happens
                 "track_id": track.id,
                 "aim": aim + jitter, 
                 "fire_frame": fire_time,
-                "score": track["score"],
-                "state": track["state"]
+                "score": item["score"],
+                "state": item["state"]
             })
         fire_time += LASER_COOLDOWN_FRAMES * redundancy
 
