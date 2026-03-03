@@ -162,7 +162,7 @@ def main():
                 writer.log_fire(result)
 
             except Exception as e: 
-                print(f"\[LOOP ERROR]: {e}")
+                print(f"[LOOP ERROR]: {e}")
                 import traceback
                 traceback.print_exc()
                 if laser: laser.off()

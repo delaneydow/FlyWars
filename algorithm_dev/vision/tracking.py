@@ -96,6 +96,8 @@ def process_video(camera, display=False):
                 tracks, next_track_id = associate_detections_to_tracking_fast(
                         detections, tracks, next_track_id,
                         )
+                active_ids = {t.id for t in tracks}
+                track_states = {k: v for k, v in track_states.items() if k in active_ids}
                 if frame_idx % 3 == 0: # run less often (i.e. less expensive)
                     tracks = deduplicate_tracks(tracks) # one track per fly, protect stationary leak
             except Exception as e:

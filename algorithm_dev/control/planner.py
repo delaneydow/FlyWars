@@ -27,7 +27,13 @@ def plan_targets(tracks, track_states, beam_position, frame_idx):
     scored = []
     for t in tracks: 
         state = track_states.get(t.id, STATE_UNKNOWN)
+        # debug - TODO remove once firing works
+        pred = getattr(t, "cached_prediction", None)
+        cov = t.kf.errorCovPost
+        uncertainty = cov[0,0] + cov[1,1]
+        print(f" [SCORE DEBUG] track {t.id} state={state} pred={pred} uncertainty={uncertainty:.2f}")
         score = score_track(t, state, beam_position)
+        print(f" [SCORE DEBUG] track {t.id} score={score:.4f}")
         if score > 0: 
             scored.append({
                 "score": score,
@@ -40,7 +46,8 @@ def plan_targets(tracks, track_states, beam_position, frame_idx):
     # --- sort: hovering first, then cruising, then by score ---
     state_priority = {STATE_HOVERING: 2,
                       STATE_CRUISING: 1,
-                      STATE_ACCELERATING: 0,}
+                      STATE_ACCELERATING: 0,
+                      }
     scored.sort(key=lambda x: (state_priority.get(x["state"], 0), x["score"]),reverse=True)
 
     plan = []
@@ -48,7 +55,10 @@ def plan_targets(tracks, track_states, beam_position, frame_idx):
 
     for item in scored: #TODO are vars correct here not that track is updated
         track = item["track"]
-        aim = predict_position(track, k=PREDICT_HORIZON)
+        aim = getattr(track, "cached_position", None)
+
+        if aim is None:
+            continue #skip track if no prediction cached yet
 
         # add redundant points if high uncertainty 
         cov_trace = np.trace(track.kf.errorCovPost)

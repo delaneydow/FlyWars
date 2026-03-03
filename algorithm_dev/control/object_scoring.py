@@ -6,12 +6,12 @@
 
 #imports
 import numpy as np
-
+from algorithm_dev.vision.state_defs import *
 # tunable constants
 
 ENGAGE_RADIUS = 120       # px from laser center
 MIN_SPEED = 2.0           # px/frame
-MAX_COV_THRESHOLD = 15 #TODO see if i need to tune this value
+MAX_COV_THRESHOLD = 100 #TODO see if i need to tune this value
 SPOT_RADIUS_MM = 1.7 # laser spot radius in mm #TODO get actual estimate 
 # empirical estimates
 MM_PER_PX = 0.533 # mm per pixel
@@ -75,7 +75,7 @@ def predict_position(track, k=PREDICT_HORIZON):
     x_pred = x + vx * adaptive_k + 0.5 * ax * adaptive_k**2
     y_pred = y + vy * adaptive_k + 0.5 * ay * adaptive_k**2
 
-    return np.array([x_pred, y_pred])
+    return np.array([x_pred, y_pred]), int(adaptive_k)
 
 
 def score_track(track, state, beam_position): 
@@ -99,8 +99,9 @@ def score_track(track, state, beam_position):
     cov = track.kf.errorCovPost
     uncertainty = cov[0,0] + cov[1,1]
 
-    if uncertainty > MAX_COV_THRESHOLD: 
-        return 0.0 
+    #filter on settled tracks (>5 frames)
+    #if track.last_seen > 5 and uncertainty > MAX_COV_THRESHOLD: 
+     #       return 0.0 
     
     stability = np.exp(-UNCERTAINTY_PENALTY * uncertainty)
 
@@ -115,9 +116,9 @@ def score_track(track, state, beam_position):
     #speed = track.speed()
 
     state_weight = {
-        "hovering": 1.3, 
-        "cruising": 0.9, 
-        "accelerating": 0.5,
+        STATE_HOVERING: 1.3, 
+        STATE_CRUISING: 0.9, 
+        STATE_ACCELERATING: 0.5,
     }.get(state, 0.5) 
 
     # speed penality 

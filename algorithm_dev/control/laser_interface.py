@@ -16,6 +16,12 @@ class LaserInterface:
         self.ready = False
         self.ser.write(b"FIRE\n")
         self.ser.flush()
+        # read MCU acknowledgment
+        try:
+            resp = self.ser.readline().decode().strip()
+            print(f"[LASER] MCU response: '{resp}'")
+        except Exception:
+            pass
         time.sleep(0.25)
         self.ready = True
 

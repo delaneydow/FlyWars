@@ -102,7 +102,7 @@ class Track:
 
                 # smoothed velocity --- utilize alpha value 
                 self.kf.statePost[2,0] = (1-self.alpha) *self.kf.statePost[2,0] + self.alpha*(dx/ dt_eff)
-                self.kf.statePost[3,0] = (1-self.alpha) *self.kf.statePost[2,0] + self.alpha*(dy /dt_eff)
+                self.kf.statePost[3,0] = (1-self.alpha) *self.kf.statePost[3,0] + self.alpha*(dy /dt_eff)
 
             self.kf.correct(measured)
             

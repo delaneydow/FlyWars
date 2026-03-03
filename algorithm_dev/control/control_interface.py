@@ -1,4 +1,4 @@
-# control_interface.py
+#control_interface.py
 from algorithm_dev.control.planner import plan_targets, LASER_COOLDOWN_FRAMES
 import numpy as np
 import time
@@ -28,6 +28,7 @@ def control_step(tracks, track_states, frame_idx, laser, mirror):
         pred_xy, k_eff = predict_position(t, k=PREDICT_HORIZON + fire_delay)
         t.cached_prediction = pred_xy
         t.cached_k = k_eff
+        print(f"  [SCORE DEBUG] track {t.id} pred={pred_xy} k_eff={k_eff}")
 
     # plan targets
     plan = plan_targets(tracks, track_states, beam_position, frame_idx) #TODO i think this is actually mirror, pass where mirror moved to last time it fired? 

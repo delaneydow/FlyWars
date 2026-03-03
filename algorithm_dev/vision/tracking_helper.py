@@ -117,6 +117,8 @@ def associate_detections_to_tracking_fast(detections, tracks, next_id): #TODO ta
 
        
     # CASE 4: remove and prune old tracks
+    for ti, di in track_matches.items():
+        tracks[ti].update(detections[di])
     tracks = [t for t in tracks if t.missed <=MAX_MISSED]
 
     return tracks, next_id
