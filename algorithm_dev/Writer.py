@@ -18,7 +18,12 @@ class Writer:
                 f"{f['ndet']},{f['ntrack']},"
                 f"{f['temp']},{f['cooldown']}\n"
             )
-
+    def log_fire(self, result):
+        if not result:
+            return
+        self.fire_file.write(
+                f"{result['frame']}, {result['track_id']},{result['score']},"
+                f"{result['aim_x']}, {result['aim_y']}\n")
     
 
 

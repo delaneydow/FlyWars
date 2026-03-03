@@ -50,7 +50,6 @@ def process_video(camera, display=False):
     try: 
 
         while True: # stop stream after max frames, exit gracefuly 
-            print("[VISION] loop alive")
 
             frame = camera.get_frame() # start stream
             # tolerate dropped frames
@@ -130,7 +129,6 @@ def process_video(camera, display=False):
                 if cv2.waitKey(1) & 0xFF == 27:  # ESC
                     print("[INFO] ESC pressed — stopping")
                     break
-            print ("[VISION] loop yielding")
             try:
 
                 yield {
@@ -149,7 +147,6 @@ def process_video(camera, display=False):
                 import traceback; traceback.print_exc()
                 # don't break, keep looping
 
-            print("[VISION] resumed after yield")
             prev_gray = curr_gray
             frame_idx += 1
     except Exception as e: 

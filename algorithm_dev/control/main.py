@@ -101,13 +101,11 @@ def main():
   
     # === CALL VISION LOOP ===
     last_packet_time = time.perf_counter()
-    WATCHDOG_TIMEOUT = 0.1 #100 ms, deadman watchdog
+    WATCHDOG_TIMEOUT = 2.0 #deadman watchdog, must be > mirror_settle + laser_fire time
     
     try: 
         print("[SYSTEM] Starting vision loop...")
         for packet in process_video(cam, display=False): 
-
-            print("[VISION] packet received")
 
             try: 
 
@@ -153,8 +151,8 @@ def main():
                 writer.log_frame({
                     "frame": packet["frame"],
                     "time": time.time(),
-                    "vision_latency": packet["vision_latency_ms"],
-                    "pipeline_latency": total_pipeline_ms,
+                    "vision_latency_ms": packet["vision_latency_ms"],
+                    "pipeline_latency_ms": total_pipeline_ms,
                     "ndet": packet["detections"],
                     "ntrack": len(packet["tracks"]),
                     "temp": cpu_temp,
