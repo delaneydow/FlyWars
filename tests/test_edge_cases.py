@@ -50,7 +50,7 @@ class FakeMirror:
         self.commands.append((u, v))
 
     def is_reachable(self, x, y):
-        return abs(x) < 100 and abs(y) < 100
+        return abs(x) <= 100 and abs(y) <= 100
 
     def clip_to_reachable(self, x, y):
         return np.clip(x, -100, 100), np.clip(y, -100, 100)
@@ -164,13 +164,22 @@ def test_prediction_horizon_logic():
     increasing horizon should move prediction farther
     """
 
-    class DummyTrack:
-        def __init__(self):
-            self.pos = np.array([0.0, 0.0])
-            self.vel = np.array([10.0, 0.0])
+    # === Dummy track adapter ===
+# === Dummy track adapter ===
+class DummyKF: 
+    def __init__(self, x, y, vx, vy): 
+        # simplified covariances for testing
+        self.statePost = np.array([[float(x)], [float(y)], [float(vx)], [float(vy)]])
+        self.errorCovPost = np.diag([1,1,1,1])
 
-        def predict(self, k):
-            return self.pos + k * self.vel
+class DummyTrack: 
+    def __init__(self, x, y, vx, vy, track_id=1): 
+        self.id = track_id
+        self.kf = DummyKF(x, y, vx, vy)
+        self.cached_prediction = None
+        self.cached_k = None
+
+
 
     track = DummyTrack()
 
@@ -208,6 +217,93 @@ def test_watchdog_shutdown_behavior():
 
     print_result("Watchdog shutdown", passed)
 
+    # safe exit without hardware
+
+    def test_control_without_hardware():
+        import algorithm_dev.control.control_interface as ci
+
+        ci.laser = None
+        ci.mirror = None
+
+        try:
+            ci.control_step([], {}, 1)
+            passed = True
+        except Exception:
+            passed = False
+
+        print_result("Control safe without hardware", passed)
+
+# === FIRING/FULL SYSTEM TESTS ===
+
+# single object
+def test_single_target_fire():
+    from algorithm_dev.control.control_interface import control_step
+
+    track = DummyTrack(x=0., y=0., vx=5., vy=0.)
+
+    result = control_step([track], {}, 1)
+
+    passed = result is not None and result["fired"]
+
+    print_result("Single target fire", passed)
+
+    # multiple targets, one frame
+
+    def test_single_fire_per_frame():
+        from algorithm_dev.control.control_interface import control_step
+
+        class DummyTrack:
+            def __init__(self, i):
+                self.id = i
+                self.pos = np.array([i*5.,0.])
+                self.vel = np.array([1.,0.])
+
+        tracks = [DummyTrack(i) for i in range(5)]
+
+        result = control_step(tracks, {}, 1)
+
+        passed = result is not None
+
+        print_result("Single fire per frame", passed)
+
+    # beam position updates
+    def test_beam_position_updates():
+        import algorithm_dev.control.control_interface as ci
+
+        start = ci.beam_position.copy()
+
+        class DummyTrack:
+            def __init__(self):
+                self.id = 1
+                self.pos = np.array([20.,20.])
+                self.vel = np.zeros(2)
+
+        ci.control_step([DummyTrack()], {}, 1)
+
+        passed = not np.allclose(start, ci.beam_position)
+
+        print_result("Beam position update", passed)
+
+    # planner stability over frames: 
+    def test_multi_frame_stability():
+        from algorithm_dev.control.control_interface import control_step
+
+        class DummyTrack:
+            def __init__(self):
+                self.id = 1
+                self.pos = np.array([0.,0.])
+                self.vel = np.array([2.,0.])
+
+        stable = True
+
+        for f in range(10):
+            r = control_step([DummyTrack()], {}, f)
+            if r is None:
+                stable = False
+
+        print_result("Multi-frame stability", stable)
+
+
 
 # ===============================
 # RUN ALL TESTS
@@ -224,6 +320,12 @@ def run_all():
     test_prediction_horizon_logic()
     test_multiple_pause_cycles()
     test_watchdog_shutdown_behavior()
+
+    test_single_target_fire()
+    test_single_fire_per_frame()
+    test_beam_position_updates()
+    test_control_without_hardware()
+    test_multi_frame_stability()
 
     print("\n=== Tests Complete ===\n")
 
