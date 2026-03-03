@@ -103,35 +103,44 @@ def main():
     WATCHDOG_TIMEOUT = 0.1 #100 ms, deadman watchdog
     
     try: 
+        print("[SYSTEM] Starting vision loop...")
+        for packet in process_video(cam, display=False): 
 
-        for packet in process_video(): 
+            print("[VISION] packet received")
 
-            now = time.perf_counter()
+            try: 
 
-            # watch dog, if vision stalls then turn off system
-            if now - last_packet_time > WATCHDOG_TIMEOUT:
-                print("[WATCHDOG] Vision timeout")
-                if laser:
-                    laser.off()
-                if mirror: 
-                    mirror.off()
+                now = time.perf_counter()
 
-            last_packet_time = now #system kills on lag 
+                # watch dog, if vision stalls then turn off system
+                if now - last_packet_time > WATCHDOG_TIMEOUT:
+                    print("[WATCHDOG] Vision timeout")
+                    if laser:
+                        laser.off()
+                    if mirror: 
+                        mirror.off()
+    
+                last_packet_time = now #system kills on lag 
 
-            # pause handling 
-            while PAUSED:
-                if laser: 
-                    laser.off()
-                if mirror:
-                    mirror.off()
-                time.sleep(0.1)
+                # pause handling 
+                while PAUSED:
+                    if laser: 
+                        laser.off()
+                    if mirror:
+                        mirror.off()
+                    time.sleep(0.1)
 
 
-            # CONTROL STEP 
-            pipeline_start = packet["timestamp"] # starting time 
-            result = control_step(packet["tracks"],
+                # CONTROL STEP 
+                pipeline_start = packet["timestamp"] # starting time 
+                result = control_step(packet["tracks"],
                                 packet["states"],
                                 packet["frame"]) 
+            except Exception as e: 
+                print ("\n[CONTROL ERROR")
+                import traceback
+                traceback.print_exc()
+                raise
 
             #CPU / thermal monitoring (from cooldown.py)
             cpu_temp = get_cpu_temp()

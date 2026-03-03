@@ -24,7 +24,7 @@ from algorithm_dev.vision.tracking_helper import *
 
 # === MAIN PROCESSING LOOP ===
 
-def process_video(): 
+def process_video(camera, display=False): 
     print(f"beginning...\n") 
 
     
@@ -36,10 +36,13 @@ def process_video():
     track_states = {}
     frame_idx = 0
     
-    # instance of camera class 
-    camera = Camera()
+    # instance of camera class (now control/main should handle this)
+    #camera = Camera()
     # grab first frame to initialize prev_gray
-    frame = camera.get_frame()
+    frame = None
+    while frame is None:
+        frame = camera.get_frame()
+
     prev_gray, roi_offset = preprocess_and_crop(frame)
     last_time = None
     
@@ -47,8 +50,13 @@ def process_video():
     try: 
 
         while True: # stop stream after max frames, exit gracefuly 
+            print("[VISION] loop alive")
 
             frame = camera.get_frame() # start stream
+            # tolerate dropped frames
+            if frame is None: 
+                continue
+
             vision_start = time.perf_counter() #records detection speed
 
             now = time.time()
@@ -96,10 +104,11 @@ def process_video():
             # compute total frame latency once
             vision_latency_ms = (time.perf_counter() - vision_start) * 1000
 
-            if cv2.waitKey(1) & 0xFF == 27:  # ESC
-                print("[INFO] ESC pressed — stopping")
-                break
-
+            if display: 
+                if cv2.waitKey(1) & 0xFF == 27:  # ESC
+                    print("[INFO] ESC pressed — stopping")
+                    break
+            print ("[VISION] loop yielding")
             yield {
                 "frame": frame_idx,
                 "tracks": tracks, 
@@ -112,7 +121,7 @@ def process_video():
             prev_gray = curr_gray
             frame_idx += 1
     finally: 
-       camera.close()
+       print("[VISION] shutdown")
 
   
 
