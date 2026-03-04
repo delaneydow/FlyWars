@@ -39,9 +39,9 @@ class Track:
         self.q = 1e-2
         
         # tune noise matrices to reduce overshoot 
-        self.kf.errorCovPost = np.eye(4, dtype=np.float32) * 10 #initialize velocity covariance
-        self.kf.processNoiseCov[:] = 0
-        self.kf.measurementNoiseCov = np.eye(2, dtype=np.float32) * 3.0 #1e-0 TODO tune this 
+        self.kf.errorCovPost = np.eye(4, dtype=np.float32) * 5 #initialize velocity covariance
+        self.kf.processNoiseCov[:] = np.eye(4, dtype=np.float32) * 0.1
+        self.kf.measurementNoiseCov = np.eye(2, dtype=np.float32) * 5.0 #1e-0 TODO tune this 
 
         self.kf.statePre = np.array([[centroid[0]],
                                      [centroid[1]],
@@ -131,8 +131,6 @@ class Track:
         vx = self.kf.statePost[2,0]
         vy = self.kf.statePost[3,0]
         return float(np.hypot(vx, vy))
-    
-   
 
     @property
     def last_position(self): 

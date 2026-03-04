@@ -5,16 +5,16 @@ from scipy.optimize import linear_sum_assignment
 
 
 # constants to access 
-THRESH_VAL = 12 # frame subtraction threshold
-MIN_AREA = 5 # minimum blob area (pixels)
-MAX_AREA = 3500 # max blob area (pixels)
-MAX_MISSED = 5 # allows tracks to survive 5 frames without a detection
-MAX_TRACK_DIST = 50 # max distance for track association (pixels), need to be a bit because the objects are falling / flying
+THRESH_VAL = 20 # frame subtraction threshold - reduce noise triggering
+MIN_AREA = 15 # minimum blob area (pixels)
+MAX_AREA = 800 # max blob area (pixels)
+MAX_MISSED = 3 # allows tracks to survive N frames without a detection
+MAX_TRACK_DIST = 40 # max distance for track association (pixels), need to be a bit because the objects are falling / flying
 MAX_TRACKS = 20 # TODO tune this
 
 # ROI Configuration
 # define ROI as fractions of frame dimensions
-ROI_X_MIN = 0.5
+ROI_X_MIN = 0.0
 ROI_Y_MIN = 0.0
 
 # Precomputed morphology kernels (create once)
@@ -124,10 +124,16 @@ def associate_detections_to_tracking_fast(detections, tracks, next_id): #TODO ta
     return tracks, next_id
 
 
-def deduplicate_tracks(tracks, radius=15, vel_thresh=50): #TODO FIX THIS TO IMPROVE DEDUPLICATION, CURRENTLY BASED ON LAST POSITION ONLY
+def deduplicate_tracks(tracks, radius=20, vel_thresh=30): #TODO FIX THIS TO IMPROVE DEDUPLICATION, CURRENTLY BASED ON LAST POSITION ONLY
     # distance gating in association or deduplication only once every N frames
     # prevent same location collapse
     if len(tracks) <=1: 
+        return tracks
+
+    # only keep tracks that have been seen at least 2 frames — filters single-frame noise
+    tracks = [t for t in tracks if t.last_seen >= 2]
+
+    if not tracks: 
         return tracks
 
     grid = {} # use spatial grid hasing / grid binning, duplicates only occur when tracks are close
@@ -138,7 +144,7 @@ def deduplicate_tracks(tracks, radius=15, vel_thresh=50): #TODO FIX THIS TO IMPR
 
     for t in tracks: 
         x, y = t.last_position
-        key = (x // radius, y // radius)
+        key = (int(x) // radius, int(y) // radius)
         
         duplicate = False
 
@@ -161,8 +167,8 @@ def deduplicate_tracks(tracks, radius=15, vel_thresh=50): #TODO FIX THIS TO IMPR
                     continue
 
                 # velocity similarity check
-                vx1, vy1 = t.kf.statePost[2:, 0]
-                vx2, vy2 = k.kf.statePost[2:,0]
+                vx1, vy1 = float(t.kf.statePost[2,0]), float(t.kf.statePost[3,0])
+                vx2, vy2 = float(k.kf.statePost[2,0]), float(k.kf.statePost[3,0])
 
                 vel_diff = np.hypot(vx1 - vx2, vy1 - vy2) 
 

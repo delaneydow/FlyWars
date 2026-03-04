@@ -18,56 +18,28 @@ laser_pwm = PWM(Pin(LASER_PIN))
 laser_pwm.freq(PWM_FREQ)
 laser_pwm.duty_u16(0)   # laser OFF
 
-firing = False
-
 
 def fire_laser():
-    global firing
+    while True:
+        cmd = sys.stdin.readline()
+        if not cmd:
+            continue
+        cmd = cmd.strip()
+        if cmd == "FIRE":
+            laser_pwm.duty_u16(FIRE_DUTY)
+            sys.stdout.write("OK\n")
+            sys.stdout.flush()
+        elif cmd == "OFF":
+            laser_pwm.duty_u16(0)
+            sys.stdout.write("OK\n")
+            sys.stdout.flush()
+        elif cmd.startswith("DUTY"):
+            try:
+                _, val = cmd.split()
+                laser_pwm.duty_u16(int(val))
+            except:
+                pass
 
-    if firing:
-        return
-
-    firing = True
-
-    # turn laser ON
-    laser_pwm.duty_u16(FIRE_DUTY)
-
-    time.sleep(MIN_FIRE_TIME)
-
-    # turn laser OFF
-    laser_pwm.duty_u16(0)
-
-    firing = False
 
 
-# SERIAL LOOP
-while True:
-
-    cmd = sys.stdin.readline()
-
-    if not cmd:
-        continue
-
-    cmd = cmd.strip()
-
-    if cmd == "FIRE":
-        fire_laser()
-        sys.stdout.write("OK\n")
-        sys.stdout.flush()
-
-    elif cmd.startswith("DUTY"):
-        # example: DUTY 20000
-        try:
-            _, val = cmd.split()
-            laser_pwm.duty_u16(int(val))
-        except:
-            pass
-
-    elif cmd.startswith("FREQ"):
-        # example: FREQ 1000
-        try:
-            _, val = cmd.split()
-            laser_pwm.freq(int(val))
-        except:
-            pass
 
