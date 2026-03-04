@@ -45,8 +45,10 @@ def predict_position(track, k=PREDICT_HORIZON):
     Predict future (x,y) after k frames using given Kalman velocity
     """
     
-    x,y = track.kf.statePost[0,0], track.kf.statePost[1,0]
-    vx, vy = track.kf.statePost[2,0], track.kf.statePost[3,0]
+    x = track.kf.statePost[0,0]
+    y = track.kf.statePost[1,0]
+    vx = track.kf.statePost[2,0]
+    vy = track.kf.statePost[3,0]
     speed = np.hypot(vx, vy) #px/second
 
     # velocity damping for slow / hovering targets only 
@@ -110,15 +112,16 @@ def score_track(track, state, beam_position):
     #if track.last_seen > 5 and uncertainty > MAX_COV_THRESHOLD: 
      #       return 0.0 
     
-    stability = 1.0/ (1.0+uncertainty) #np.exp(-UNCERTAINTY_PENALTY * uncertainty)
+    stability = 1.0/ (1.0+float(uncertainty)) #np.exp(-UNCERTAINTY_PENALTY * uncertainty)
 
     # === mirror travel cost === 
-    mirror_delta = np.linalg.norm(prediction - np.asarray(beam_position))
+    mirror_delta = float(np.linalg.norm(prediction - np.asarray(beam_position)))
     mirror_cost = 1.0 / (1.0+ mirror_delta) #TODO figure out if this is necessary 
 
     # === motion state weighting (hovering first) === 
-    vx, vy = track.kf.statePost[2:,0], track.kf.statePost[3,0] #first time x, second term y
-    speed = np.hypot(vx, vy) 
+    vx = float(track.kf.statePost[2,0])
+    vy = float(track.kf.statePost[3,0]) #first time x, second term y
+    speed = float(np.hypot(vx, vy)) 
     #speed = track.speed()
 
     state_weight = {
@@ -135,7 +138,8 @@ def score_track(track, state, beam_position):
     score = (
         mirror_cost * state_weight * stability * speed_penalty # * commitment * cluster_bonus
     )
-    print(f"  [SCORE DEBUG] mirror_cost={mirror_cost:.4f} stability={stability:.4f} state_weight={state_weight} speed_penalty={speed_penalty:.4f}")
+    if DEBUG_SCORING: 
+        print(f"  [SCORE DEBUG] mirror_cost={mirror_cost:.4f} stability={stability:.4f} state_weight={state_weight} speed_penalty={speed_penalty:.4f}")
     
     return float(score)
 

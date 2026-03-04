@@ -55,7 +55,7 @@ def plan_targets(tracks, track_states, beam_position, frame_idx):
 
     for item in scored: #TODO are vars correct here not that track is updated
         track = item["track"]
-        aim = getattr(track, "cached_position", None)
+        aim = getattr(track, "cached_prediction", None)
 
         if aim is None:
             continue #skip track if no prediction cached yet
