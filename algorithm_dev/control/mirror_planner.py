@@ -1,4 +1,4 @@
-#mirror_planner.py
+﻿#mirror_planner.py
 
 # GOAL: 
 # - integrate with mirror
@@ -8,6 +8,7 @@
 
 import numpy as np
 from matplotlib.path import Path as MplPath
+from scipy.spatial import cKDTree #make mirror path / calibration faster 
 import serial # for access with mre-3 serial port 
 import time
 
@@ -40,6 +41,8 @@ class MirrorPlanner:
 
         self.hull_path = MplPath(data["hull"]) #convex hull for mirror reachability
         self.spot_radius_px = spot_radius_px or 6.0 #TODO figure out how to integrate this again
+
+        self._xy_tree = cKDTree(np.column_stack([self.x_map, self.y_map]))
 
     def clamp_uv(self, u, v): 
         return(
@@ -74,14 +77,13 @@ class MirrorPlanner:
         # clip first
         x_target, y_target = self.clip_to_reachable(x_target, y_target)
 
-        d = np.hypot(self.x_map -x_target,
-                     self.y_map - y_target)
-        idx = np.argmin(d)
-
+        # precomputed KDTree query --> O log n runtime 
+        _, idx = self._xy_tree.query([x_target, y_target])
         return (
-            np.clip(self.u_map[idx], self.u_min, self.u_max),
-            np.clip(self.v_map[idx], self.v_min, self.v_max)
-        )
+            float(np.clip(self.u_map[idx], self.u_min, self.u_max)),
+            float(np.clip(self.v_map[idx], self.v_min, self.v_max))
+        )   
+
     
     def send_uv(self, u, v): 
 

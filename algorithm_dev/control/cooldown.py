@@ -1,12 +1,16 @@
-# cooldown.py
+﻿# cooldown.py
 
 # cpu thermal adaptability 
 def get_cpu_temp(): 
     try: 
-        with open("sys/class/thermal/thermal_zone0/temp") as f: 
+        with open("/sys/class/thermal/thermal_zone0/temp") as f: #TODO double check this 
             return float(f.read()) / 1000.0
     except Exception: 
         return None
+
+    # verify with: 
+    #cat /sys/class/thermal/thermal_zone0/temp
+    #ls /sys/class/thermal/
     
 def adaptive_cooldown(temp_c): # input temp in celsius
     # adjust waiting time based on board temperature. Will need to tune threshold

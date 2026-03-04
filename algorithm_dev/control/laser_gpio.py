@@ -1,4 +1,4 @@
-# laser_gpio.py
+﻿# laser_gpio.py
 
 from machine import Pin, PWM
 import time
@@ -52,6 +52,8 @@ while True:
 
     if cmd == "FIRE":
         fire_laser()
+        sys.stdout.write("OK\n")
+        sys.stdout.flush()
 
     elif cmd.startswith("DUTY"):
         # example: DUTY 20000

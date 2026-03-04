@@ -165,9 +165,7 @@ def main():
                 print(f"[LOOP ERROR]: {e}")
                 import traceback
                 traceback.print_exc()
-                if laser: laser.off()
-                if mirror: mirror.off()
-                continue #always continue, don't let single frame kill stream
+                continue #don't touch hardware on transient errors
 
         #TODO maybe df of quick/final stats (i.e. save off total fire_count among other variables)     
 

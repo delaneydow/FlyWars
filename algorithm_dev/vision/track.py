@@ -105,6 +105,14 @@ class Track:
                 self.kf.statePost[3,0] = (1-self.alpha) *self.kf.statePost[3,0] + self.alpha*(dy /dt_eff)
 
             self.kf.correct(measured)
+            MAX_SPEED_PX = 600 #pixels/second, approx 1/2 the FOV per frame 
+            vx = self.kf.statePost[2,0]
+            vy = self.kf.statePost[3,0]
+            speed = np.hypot(vx,vy)
+            if speed > MAX_SPEED_PX: 
+                scale = MAX_SPEED_PX / speed
+                self.kf.statePost[2,0] = vx * scale
+                self.kf.statePost[3,0] = vy * scale
             
             x = float(self.kf.statePost[0,0]) #float rather than int to maintain precision
             y = float(self.kf.statePost[1,0])

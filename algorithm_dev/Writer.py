@@ -1,4 +1,4 @@
-class Writer:
+﻿class Writer:
     def __init__(self): 
 
         self.frame_file = open("frames.csv", "w", buffering=1)
@@ -6,7 +6,7 @@ class Writer:
         self.fire_file = open("fires.csv", "w", buffering=1)
 
 
-        self.frame_file.write("frame,time,latency_ms,pipeline_latency_ms,ndet,ntrack,temp,cooldown\n")
+        self.frame_file.write("frame,time,vision_latency_ms,pipeline_latency_ms,ndet,ntrack,temp,cooldown\n")
 
         self.track_file.write("frame,track,x,y,vx,vy,speed,state,cov\n")
 

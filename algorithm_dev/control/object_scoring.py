@@ -1,4 +1,4 @@
-#Algorithm outline and testing
+﻿#Algorithm outline and testing
 """ GOAL: KALMAN, ASSOCIATION, TRACK LIFECYCLE"""
 
 # === PART 1: DETECT & LOCALIZE FLIES PER FRAME ===
@@ -33,6 +33,11 @@ SYSTEM_LATENCY = 0.075 + MIN_FIRE_TIME# (listed in seconds) #TODO tweak this val
 PREDICT_HORIZON =  int(SYSTEM_LATENCY/ FRAME_DT) #8 #int(SYSTEM_LATENCY/FRAME_DT) # num. of frames TODO change/refine eventually
 UNCERTAINTY_PENALTY = 0.5 
 
+DEBUG_SCORING = False  # set True only when debugging
+
+if DEBUG_SCORING:
+    print(f"  [SCORE DEBUG] ...")
+
 # function definitions
 
 def predict_position(track, k=PREDICT_HORIZON): 
@@ -42,22 +47,22 @@ def predict_position(track, k=PREDICT_HORIZON):
     
     x,y = track.kf.statePost[0,0], track.kf.statePost[1,0]
     vx, vy = track.kf.statePost[2,0], track.kf.statePost[3,0]
-    speed = np.hypot(vx, vy)
+    speed = np.hypot(vx, vy) #px/second
 
-    # velocity damping 
-    if speed < 2:
-        vx *= 0.6
-        vy *= 0.6
+    # velocity damping for slow / hovering targets only 
+    if speed < 10:
+        vx *= 0.5
+        vy *= 0.5
 
-    # clamp velocity for slow targets: 
-    if speed < 1.0: 
+    # adaptive horizon scaling 
+    if speed < 10: #nearly stationary
         adaptive_k = 1.0 #nearly current position
-    elif speed < 5.0: 
-        adaptive_k = k * 0.6 #fast moving
+    elif speed < 50.0: #slow crawl 
+        adaptive_k = k * 0.5
+    elif speed < 150.0: #moderate flight
+        adaptive_k = k * 0.8
     else: 
-        adaptive_k = k * 1.0
-
-    # Adaptive horizon scaling -- longer horizon for faster objects 
+        adaptive_k = k * 1.0 #fast flight 
     #adaptive_k = k * min(1.5, max(0.5, speed / 5.0)) #TODO figure out how to balance this 
 
     # acceleration estimate
@@ -98,20 +103,21 @@ def score_track(track, state, beam_position):
     
     cov = track.kf.errorCovPost
     uncertainty = cov[0,0] + cov[1,1]
+    if uncertainty > MAX_COV_THRESHOLD:
+        return 0.0
 
     #filter on settled tracks (>5 frames)
     #if track.last_seen > 5 and uncertainty > MAX_COV_THRESHOLD: 
      #       return 0.0 
     
-    stability = np.exp(-UNCERTAINTY_PENALTY * uncertainty)
+    stability = 1.0/ (1.0+uncertainty) #np.exp(-UNCERTAINTY_PENALTY * uncertainty)
 
     # === mirror travel cost === 
-    mirror_delta = np.linalg.norm(prediction - beam_position)
-
+    mirror_delta = np.linalg.norm(prediction - np.asarray(beam_position))
     mirror_cost = 1.0 / (1.0+ mirror_delta) #TODO figure out if this is necessary 
 
     # === motion state weighting (hovering first) === 
-    vx, vy = track.kf.statePost[2:,0]
+    vx, vy = track.kf.statePost[2:,0], track.kf.statePost[3,0] #first time x, second term y
     speed = np.hypot(vx, vy) 
     #speed = track.speed()
 
@@ -129,6 +135,7 @@ def score_track(track, state, beam_position):
     score = (
         mirror_cost * state_weight * stability * speed_penalty # * commitment * cluster_bonus
     )
+    print(f"  [SCORE DEBUG] mirror_cost={mirror_cost:.4f} stability={stability:.4f} state_weight={state_weight} speed_penalty={speed_penalty:.4f}")
     
     return float(score)
 
