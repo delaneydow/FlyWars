@@ -39,9 +39,9 @@ class Track:
         self.q = 1e-2
         
         # tune noise matrices to reduce overshoot 
-        self.kf.errorCovPost = np.eye(4, dtype=np.float32) * 10 #initialize velocity covariance
-        self.kf.processNoiseCov[:] = 0
-        self.kf.measurementNoiseCov = np.eye(2, dtype=np.float32) * 3.0 #1e-0 TODO tune this 
+        self.kf.errorCovPost = np.eye(4, dtype=np.float32) * 5 #initialize velocity covariance
+        self.kf.processNoiseCov[:] = np.eye(4, dtype=np.float32) * 0.1
+        self.kf.measurementNoiseCov = np.eye(2, dtype=np.float32) * 5.0 #1e-0 TODO tune this 
 
         self.kf.statePre = np.array([[centroid[0]],
                                      [centroid[1]],
@@ -73,6 +73,8 @@ class Track:
         self.kf.processNoiseCov[3,3] = q 
 
         pred = self.kf.predict()
+        # cap covariance to prevent runaway divergence during missed frames
+        np.clip(self.kf.errorCovPost, 0, 500, out=self.kf.errorCovPost)
         return pred[0,0], pred[1,0]
 
     def update(self, detection=None, dt=1/60.0): #TODO use effective dt = frame_dt + system_latency
@@ -102,9 +104,17 @@ class Track:
 
                 # smoothed velocity --- utilize alpha value 
                 self.kf.statePost[2,0] = (1-self.alpha) *self.kf.statePost[2,0] + self.alpha*(dx/ dt_eff)
-                self.kf.statePost[3,0] = (1-self.alpha) *self.kf.statePost[2,0] + self.alpha*(dy /dt_eff)
+                self.kf.statePost[3,0] = (1-self.alpha) *self.kf.statePost[3,0] + self.alpha*(dy /dt_eff)
 
             self.kf.correct(measured)
+            MAX_SPEED_PX = 600 #pixels/second, approx 1/2 the FOV per frame 
+            vx = self.kf.statePost[2,0]
+            vy = self.kf.statePost[3,0]
+            speed = np.hypot(vx,vy)
+            if speed > MAX_SPEED_PX: 
+                scale = MAX_SPEED_PX / speed
+                self.kf.statePost[2,0] = vx * scale
+                self.kf.statePost[3,0] = vy * scale
             
             x = float(self.kf.statePost[0,0]) #float rather than int to maintain precision
             y = float(self.kf.statePost[1,0])
@@ -123,8 +133,6 @@ class Track:
         vx = self.kf.statePost[2,0]
         vy = self.kf.statePost[3,0]
         return float(np.hypot(vx, vy))
-    
-   
 
     @property
     def last_position(self): 

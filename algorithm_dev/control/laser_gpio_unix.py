@@ -1,4 +1,4 @@
-﻿# laser_gpio.py
+# laser_gpio.py
 
 from machine import Pin, PWM
 import sys

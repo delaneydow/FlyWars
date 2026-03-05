@@ -5,6 +5,7 @@ import sys
 
 from algorithm_dev.control.control_interface import control_step
 from algorithm_dev.control.cooldown import get_cpu_temp, adaptive_cooldown
+from algorithm_dev.control.object_scoring import SPOT_RADIUS_PX_SAFE
 
 # import Tracking pipeline
 from algorithm_dev.vision.track import Track #import Track class, TODO see if track needs to be passed/accessed
@@ -82,7 +83,7 @@ def main():
 
     # mirror set up
     try:
-        mirror = MirrorPlanner()  # initialize mirror
+        mirror = MirrorPlanner(map_file="mirror_map1.npz", spot_radius_px = SPOT_RADIUS_PX_SAFE)  # initialize mirror
         mirror.off()  # ensure safe start
         print("[MIRROR] OK")
     except Exception as e:
@@ -103,61 +104,71 @@ def main():
   
     # === CALL VISION LOOP ===
     last_packet_time = time.perf_counter()
-    WATCHDOG_TIMEOUT = 0.1 #100 ms, deadman watchdog
+    WATCHDOG_TIMEOUT = 2.0 #deadman watchdog, must be > mirror_settle + laser_fire time
     
     try: 
+        print("[SYSTEM] Starting vision loop...")
+        for packet in process_video(cam, display=False): 
 
-        for packet in process_video(): 
+            try: 
 
-            now = time.perf_counter()
+                now = time.perf_counter()
 
-            # watch dog, if vision stalls then turn off system
-            if now - last_packet_time > WATCHDOG_TIMEOUT:
-                print("[WATCHDOG] Vision timeout")
-                if laser:
-                    laser.off()
-                if mirror: 
-                    mirror.off()
+                # watch dog, if vision stalls then turn off system
+                if now - last_packet_time > WATCHDOG_TIMEOUT:
+                    print("[WATCHDOG] Vision timeout")
+                    if laser:
+                        laser.off()
+                    if mirror: 
+                        mirror.off()
+     
 
-            last_packet_time = now #system kills on lag 
-
-            # pause handling 
-            while PAUSED:
-                if laser: 
-                    laser.off()
-                if mirror:
-                    mirror.off()
-                time.sleep(0.1)
+                # pause handling 
+                while PAUSED:
+                    if laser: 
+                        laser.off()
+                    if mirror:
+                        mirror.off()
+                    time.sleep(0.1)
 
 
-            # CONTROL STEP 
-            pipeline_start = packet["timestamp"] # starting time 
-            result = control_step(packet["tracks"],
+                # CONTROL STEP 
+                pipeline_start = packet["timestamp"] # starting time 
+                result = control_step(packet["tracks"],
                                 packet["states"],
-                                packet["frame"]) 
+                                packet["frame"],
+                                laser,
+                                mirror)
+                last_packet_time = time.perf_counter() #reset watchdog after blocking fire
 
-            #CPU / thermal monitoring (from cooldown.py)
-            cpu_temp = get_cpu_temp()
-            cooldown = adaptive_cooldown(cpu_temp)
+                #CPU / thermal monitoring (from cooldown.py)
+                cpu_temp = get_cpu_temp()
+                cooldown = adaptive_cooldown(cpu_temp)
 
-            # TODO figure out if I should send cooldown to planning or not? 
-            if cooldown > 0: 
-                time.sleep(cooldown)
+                # TODO figure out if I should send cooldown to planning or not? 
+                if cooldown > 0: 
+                    time.sleep(cooldown)
 
-            total_pipeline_ms = (time.perf_counter() - pipeline_start) * 1000 #ms
+                total_pipeline_ms = (time.perf_counter() - pipeline_start) * 1000 #ms
 
-            writer.log_frame({
-                "frame": packet["frame"],
-                "time": time.time(),
-                "vision_latency": packet["vision_latency_ms"],
-                "pipeline_latency": total_pipeline_ms,
-                "ndet": packet["detections"],
-                "ntrack": len(packet["tracks"]),
-                "temp": cpu_temp,
-                "cooldown": cooldown
-            })
+                writer.log_frame({
+                    "frame": packet["frame"],
+                    "time": time.time(),
+                    "vision_latency_ms": packet["vision_latency_ms"],
+                    "pipeline_latency_ms": total_pipeline_ms,
+                    "ndet": packet["detections"],
+                    "ntrack": len(packet["tracks"]),
+                    "temp": cpu_temp,
+                    "cooldown": cooldown
+                })
 
-            writer.log_fire(result)
+                writer.log_fire(result)
+
+            except Exception as e: 
+                print(f"[LOOP ERROR]: {e}")
+                import traceback
+                traceback.print_exc()
+                continue #don't touch hardware on transient errors
 
         #TODO maybe df of quick/final stats (i.e. save off total fire_count among other variables)     
 

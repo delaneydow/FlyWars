@@ -24,7 +24,7 @@ from algorithm_dev.vision.tracking_helper import *
 
 # === MAIN PROCESSING LOOP ===
 
-def process_video(): 
+def process_video(camera, display=False): 
     print(f"beginning...\n") 
 
     
@@ -36,10 +36,13 @@ def process_video():
     track_states = {}
     frame_idx = 0
     
-    # instance of camera class 
-    camera = Camera()
+    # instance of camera class (now control/main should handle this)
+    #camera = Camera()
     # grab first frame to initialize prev_gray
-    frame = camera.get_frame()
+    frame = None
+    while frame is None:
+        frame = camera.get_frame()
+
     prev_gray, roi_offset = preprocess_and_crop(frame)
     last_time = None
     
@@ -49,6 +52,11 @@ def process_video():
         while True: # stop stream after max frames, exit gracefuly 
 
             frame = camera.get_frame() # start stream
+            # tolerate dropped frames
+            if frame is None: 
+                print("[VISION] None frame")
+                continue
+
             vision_start = time.perf_counter() #records detection speed
 
             now = time.time()
@@ -63,56 +71,91 @@ def process_video():
              # Preprocess & crop
             start = time.perf_counter()
             # don't need to crop frame anymore since FOV is about size from video (24 inches x 24 inch board)
-            curr_gray, _ = preprocess_and_crop(frame)
+            try: 
+                curr_gray, _ = preprocess_and_crop(frame)
+            except Exception as e: 
+                print(f"[VISION preprocess failed: {e}")
+                import traceback; traceback.print_exc()
+                continue
             t_preprocess = time.perf_counter() - start
     
             # Moving detection
             start = time.perf_counter()
-            detections, thresh = detect_moving_objects_fast(prev_gray, curr_gray)
+            try:
+
+                detections, thresh = detect_moving_objects_fast(prev_gray, curr_gray)
+            except Exception as e: 
+                print(f"[VISION] detection failed: {e}")
+                import traceback; traceback.print_exc()
+                continue
             t_move = time.perf_counter() - start
     
             # tracking only (no merging) 
             start = time.perf_counter()
-            tracks, next_track_id = associate_detections_to_tracking_fast(
-                detections, tracks, next_track_id, 
-            )
-            if frame_idx % 3 == 0: # run less often (i.e. less expensive)
-                tracks = deduplicate_tracks(tracks) # one track per fly, protect stationary leak
+            try:
+                tracks, next_track_id = associate_detections_to_tracking_fast(
+                        detections, tracks, next_track_id,
+                        )
+                active_ids = {t.id for t in tracks}
+                track_states = {k: v for k, v in track_states.items() if k in active_ids}
+                if frame_idx % 3 == 0: # run less often (i.e. less expensive)
+                    tracks = deduplicate_tracks(tracks) # one track per fly, protect stationary leak
+            except Exception as e:
+                print(f"[VISION] tracking failed: {e}")
+                import traceback; traceback.print_exc()
+                continue
             t_tracking = time.perf_counter() - start
 
             now = time.time()
             #kalman calculations (tracking and state update)
-            for t in tracks: #TODO see if we should move this to be before association
-                t.predict(dt)
-                x, y, vx, vy = t.kf.statePost[:,0] #consolidate state calls
-                cov = t.kf.errorCovPost
+            try:
+                for t in tracks: #TODO see if we should move this to be before association
+                    t.predict(dt)
+                    x, y, vx, vy = t.kf.statePost[:,0] #consolidate state calls
+                    cov = t.kf.errorCovPost
                 #vx = t.kf.statePost[2, 0]
                 #vy = t.kf.statePost[3, 0]
-                speed = t.speed()
+                    speed = t.speed()
                 
                 #if frame_idx %3 == 0: # only track every 3 frames to gauge velocity better
-                track_states[t.id] = classify_state(t) # just look every frame, trivial cost
+                    track_states[t.id] = classify_state(t) # just look every frame, trivial cost
+            except Exception as e: 
+                print(f"[VISION] kalman failed: {e}")
+                import traceback; traceback.print_exc()
+                continue
 
             # compute total frame latency once
             vision_latency_ms = (time.perf_counter() - vision_start) * 1000
 
-            if cv2.waitKey(1) & 0xFF == 27:  # ESC
-                print("[INFO] ESC pressed — stopping")
-                break
+            if display: 
+                if cv2.waitKey(1) & 0xFF == 27:  # ESC
+                    print("[INFO] ESC pressed — stopping")
+                    break
+            try:
 
-            yield {
-                "frame": frame_idx,
-                "tracks": tracks, 
-                "states": track_states,
-                "vision_latency_ms": vision_latency_ms,
-                "detections": len(detections),
-                "timestamp": time.perf_counter()
-            }
+                yield {
+                    "frame": frame_idx,
+                    "tracks": tracks, 
+                    "states": track_states,
+                    "vision_latency_ms": vision_latency_ms,
+                    "detections": len(detections),
+                    "timestamp": time.perf_counter()
+                }
+            except GeneratorExit:
+                print("[VISION] GeneratorExit -- caller closed the generator")
+                return
+            except Exception as e: 
+                print(f"[VISION] exception throwin INTO generator after yield: {e}")
+                import traceback; traceback.print_exc()
+                # don't break, keep looping
 
             prev_gray = curr_gray
             frame_idx += 1
+    except Exception as e: 
+        print(f"[VISION] outer loop crashed: {e}")
+        import traceback; traceback.print_exc()
     finally: 
-       camera.close()
+       print("[VISION] shutdown")
 
   
 

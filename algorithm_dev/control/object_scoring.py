@@ -1,4 +1,4 @@
-#Algorithm outline and testing
+﻿#Algorithm outline and testing
 """ GOAL: KALMAN, ASSOCIATION, TRACK LIFECYCLE"""
 
 # === PART 1: DETECT & LOCALIZE FLIES PER FRAME ===
@@ -6,12 +6,12 @@
 
 #imports
 import numpy as np
-
+from algorithm_dev.vision.state_defs import *
 # tunable constants
 
 ENGAGE_RADIUS = 120       # px from laser center
 MIN_SPEED = 2.0           # px/frame
-MAX_COV_THRESHOLD = 15 #TODO see if i need to tune this value
+MAX_COV_THRESHOLD = 100 #TODO see if i need to tune this value
 SPOT_RADIUS_MM = 1.7 # laser spot radius in mm #TODO get actual estimate 
 # empirical estimates
 MM_PER_PX = 0.533 # mm per pixel
@@ -31,7 +31,9 @@ laser_trigger_latency = 1 #modulation delay + thermal dwell constraint
 FRAME_DT = 1/120.0 # seconds per frame
 SYSTEM_LATENCY = 0.075 + MIN_FIRE_TIME# (listed in seconds) #TODO tweak this value!!! 
 PREDICT_HORIZON =  int(SYSTEM_LATENCY/ FRAME_DT) #8 #int(SYSTEM_LATENCY/FRAME_DT) # num. of frames TODO change/refine eventually
-UNCERTAINTY_PENALTY = 0.5 
+#UNCERTAINTY_PENALTY = 0.5 
+ARENA_DIAG = np.hypot(1600, 1200) #~2000 px
+DEBUG_SCORING = False  # set True only when debugging
 
 # function definitions
 
@@ -40,24 +42,26 @@ def predict_position(track, k=PREDICT_HORIZON):
     Predict future (x,y) after k frames using given Kalman velocity
     """
     
-    x,y = track.kf.statePost[0,0], track.kf.statePost[1,0]
-    vx, vy = track.kf.statePost[2,0], track.kf.statePost[3,0]
-    speed = np.hypot(vx, vy)
+    x = track.kf.statePost[0,0]
+    y = track.kf.statePost[1,0]
+    vx = track.kf.statePost[2,0]
+    vy = track.kf.statePost[3,0]
+    speed = np.hypot(vx, vy) #px/second
 
-    # velocity damping 
-    if speed < 2:
-        vx *= 0.6
-        vy *= 0.6
+    # velocity damping for slow / hovering targets only 
+    if speed < 10:
+        vx *= 0.5
+        vy *= 0.5
 
-    # clamp velocity for slow targets: 
-    if speed < 1.0: 
+    # adaptive horizon scaling 
+    if speed < 10: #nearly stationary
         adaptive_k = 1.0 #nearly current position
-    elif speed < 5.0: 
-        adaptive_k = k * 0.6 #fast moving
+    elif speed < 50.0: #slow crawl 
+        adaptive_k = k * 0.5
+    elif speed < 150.0: #moderate flight
+        adaptive_k = k * 0.8
     else: 
-        adaptive_k = k * 1.0
-
-    # Adaptive horizon scaling -- longer horizon for faster objects 
+        adaptive_k = k * 1.0 #fast flight 
     #adaptive_k = k * min(1.5, max(0.5, speed / 5.0)) #TODO figure out how to balance this 
 
     # acceleration estimate
@@ -75,7 +79,7 @@ def predict_position(track, k=PREDICT_HORIZON):
     x_pred = x + vx * adaptive_k + 0.5 * ax * adaptive_k**2
     y_pred = y + vy * adaptive_k + 0.5 * ay * adaptive_k**2
 
-    return np.array([x_pred, y_pred])
+    return np.array([x_pred, y_pred]), int(adaptive_k)
 
 
 def score_track(track, state, beam_position): 
@@ -98,30 +102,38 @@ def score_track(track, state, beam_position):
     
     cov = track.kf.errorCovPost
     uncertainty = cov[0,0] + cov[1,1]
+    # relative filter based on age
+    age = getattr(track, "last_seen", 0)
 
-    if uncertainty > MAX_COV_THRESHOLD: 
+    if age < 2: 
         return 0.0 
-    
-    stability = np.exp(-UNCERTAINTY_PENALTY * uncertainty)
 
-    # predict position #TODO I DON'T THINK THIS IS RIGHT
-    prediction = predict_position(track)
-    distance = np.linalg.norm(prediction - beam_position)
+    relative_max_cov = MAX_COV_THRESHOLD * (1.0 + age * 0.5) # more uncertainty for older tracks
+
+    if uncertainty > relative_max_cov:
+        return 0.0
+
+    #filter on settled tracks (>5 frames)
+    #if track.last_seen > 5 and uncertainty > MAX_COV_THRESHOLD: 
+     #       return 0.0 
+    
+    stability = 1.0/ (1.0+float(uncertainty)) #np.exp(-UNCERTAINTY_PENALTY * uncertainty)
 
     # === mirror travel cost === 
-    mirror_delta = np.linalg.norm(prediction - laser_origin)
-
-    mirror_cost = 1.0 / (1.0+ mirror_delta) #TODO figure out if this is necessary 
+    mirror_delta = float(np.linalg.norm(prediction - np.asarray(beam_position)))
+    mirror_pos_normalized = 1.0 - (mirror_delta / ARENA_DIAG) #0-1 range; 1= mirror already there#TODO figure out if this is necessary 
+    mirror_cost = max(1.0, mirror_pos_normalized) #floor at 0.1 so far targets still score 
 
     # === motion state weighting (hovering first) === 
-    vx, vy = track.kf.statePost[2:,0]
-    speed = np.hypot(vx, vy) 
+    vx = float(track.kf.statePost[2,0])
+    vy = float(track.kf.statePost[3,0]) #first time x, second term y
+    speed = float(np.hypot(vx, vy)) 
     #speed = track.speed()
 
     state_weight = {
-        "hovering": 1.3, 
-        "cruising": 0.9, 
-        "accelerating": 0.5,
+        STATE_HOVERING: 1.3, 
+        STATE_CRUISING: 0.9, 
+        STATE_ACCELERATING: 0.5,
     }.get(state, 0.5) 
 
     # speed penality 
@@ -132,6 +144,8 @@ def score_track(track, state, beam_position):
     score = (
         mirror_cost * state_weight * stability * speed_penalty # * commitment * cluster_bonus
     )
+    if DEBUG_SCORING: 
+        print(f"  [SCORE DEBUG] mirror_cost={mirror_cost:.4f} stability={stability:.4f} state_weight={state_weight} speed_penalty={speed_penalty:.4f}")
     
     return float(score)
 
