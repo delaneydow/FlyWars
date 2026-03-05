@@ -1,15 +1,12 @@
 ﻿#control_interface.py
-#control_interface.py
 from algorithm_dev.control.planner import plan_targets, LASER_COOLDOWN_FRAMES
 import numpy as np
 import time
-from algorithm_dev.control.laser_interface import LaserInterface
 from algorithm_dev.control.mirror_planner import MirrorPlanner
 from algorithm_dev.control.laser_interface import LaserInterface
-from algorithm_dev.control.mirror_planner import MirrorPlanner
 from algorithm_dev.control.object_scoring import SPOT_RADIUS_PX_SAFE, PREDICT_HORIZON, predict_position
+from testing.verify_laser_testing import *
 
-mirror_settle_time = 0.015 # 25ms, given rating of settling time + how long to switch directions (avg.) 
 mirror_settle_time = 0.015 # 25ms, given rating of settling time + how long to switch directions (avg.) 
 
 # constants
@@ -21,7 +18,7 @@ DEBUG_SCORE = False
 HIT_VERIFY_INTERVAL = 0.025  # check every 25ms during fire
 MIN_HIT_TIME = 0.25          # required hit duration
 
-def fire_with_tracking(laser, mirror, cmd, tracks, track_states):
+def fire_with_tracking(laser, mirror, cmd, tracks, get_frame=None):
     """Fire laser while verifying beam stays on target for MIN_HIT_TIME."""
 
     target_id = cmd["track_id"]
@@ -35,7 +32,7 @@ def fire_with_tracking(laser, mirror, cmd, tracks, track_states):
 
     #read MCU ack 
     try:
-        resp = laser.ser.readline().decode().strip()
+        laser.ser.readline().decode().strip() #consume MCU ack, don't need to store
     except Exception:
         pass
 
@@ -47,12 +44,13 @@ def fire_with_tracking(laser, mirror, cmd, tracks, track_states):
 
     while hit_time < MIN_HIT_TIME:
         now = time.perf_counter()
-        elapsed = now - fire_start
 
         # safety timeout — don't fire forever
         if now - fire_start > MIN_HIT_TIME * 4:  # hard safety timeout
+            settling = False
             print("[FIRE] safety timeout")
-            break
+        else:
+            continue
 
           # if mirror is settling after a redirect, wait before counting hit time
         if settling:
@@ -75,8 +73,19 @@ def fire_with_tracking(laser, mirror, cmd, tracks, track_states):
             pred, _ = predict_position(target, k=0)  # k=0 = current state
             dist = float(np.linalg.norm(pred - np.asarray(cmd["aim"])))
 
-            # check if spot covers target — use 2x spot radius as tolerance
-            if dist < SPOT_RADIUS_PX_SAFE * 2:
+            # confirm predicted positon is on target 
+            on_target = dist < SPOT_RADIUS_PX_SAFE * 2
+
+            # optical verification testing 
+            if on_target and get_frame is not None:
+                frame = get_frame()
+                if frame is not None:
+                    on_target, bright_ratio = verify_laser_on_target(
+                        frame, cmd["aim"], SPOT_RADIUS_PX_SAFE)
+                    if not on_target:
+                        print(f"[FIRE] optical miss, bright_ratio={bright_ratio:.3f}")
+
+            if on_target:
                 hit_time += HIT_VERIFY_INTERVAL
             else:
                 # only redirect if target has moved more than one spot radius
@@ -102,7 +111,7 @@ def fire_with_tracking(laser, mirror, cmd, tracks, track_states):
 
 
 
-def control_step(tracks, track_states, frame_idx, laser, mirror):
+def control_step(tracks, track_states, frame_idx, laser, mirror, get_frame=None):
     global beam_position
 
     if DEBUG_CNTRL:
@@ -138,7 +147,7 @@ def control_step(tracks, track_states, frame_idx, laser, mirror):
     if DEBUG_CNTRL:
         print(f"[FIRE] track={cmd['track_id']} aim={cmd['aim']} uv=({cmd['u']:.3f},{cmd['v']:.3f})")
     #laser.fire()
-    hit_confirmed = fire_with_tracking(laser, mirror, cmd, tracks, track_states)
+    hit_result = fire_with_tracking(laser, mirror, cmd, tracks, get_frame=None)
     if DEBUG_CNTRL:
         print(f"[FIRE] laser fired")
 
@@ -151,4 +160,7 @@ def control_step(tracks, track_states, frame_idx, laser, mirror):
         "score": cmd["score"],
         "aim_x": float(cmd["aim"][0]),
         "aim_y": float(cmd["aim"][1]),
+        "hit_time": hit_result["hit_time"],
+        "hit_confirmed": hit_result["confirmed"],
+        "redirects": hit_result["redirects"],
     }

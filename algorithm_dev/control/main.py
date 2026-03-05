@@ -135,7 +135,8 @@ def main():
                                 packet["states"],
                                 packet["frame"],
                                 laser,
-                                mirror)
+                                mirror,
+                                get_frame = cam.get_frame)
                 last_packet_time = time.perf_counter() #reset watchdog after blocking fire
 
                 #CPU / thermal monitoring (from cooldown.py)
@@ -161,6 +162,8 @@ def main():
 
                 writer.log_fire(result)
 
+                writer.log_track(packet["frame"], packet["tracks"], packet["states"])
+
             except Exception as e: 
                 print(f"[LOOP ERROR]: {e}")
                 import traceback
@@ -171,7 +174,8 @@ def main():
 
     #TODO maybe occasionally print updates
     finally: 
-        emergency_stop(None, None) #shutdown as default 
+        emergency_stop(None, None) #shutdown as default
+        writer.close() 
         print ("emergency stop completed.")
         sys.exit(0)
 
