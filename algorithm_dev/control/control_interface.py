@@ -1,11 +1,15 @@
 ﻿#control_interface.py
+#control_interface.py
 from algorithm_dev.control.planner import plan_targets, LASER_COOLDOWN_FRAMES
 import numpy as np
 import time
 from algorithm_dev.control.laser_interface import LaserInterface
 from algorithm_dev.control.mirror_planner import MirrorPlanner
+from algorithm_dev.control.laser_interface import LaserInterface
+from algorithm_dev.control.mirror_planner import MirrorPlanner
 from algorithm_dev.control.object_scoring import SPOT_RADIUS_PX_SAFE, PREDICT_HORIZON, predict_position
 
+mirror_settle_time = 0.015 # 25ms, given rating of settling time + how long to switch directions (avg.) 
 mirror_settle_time = 0.015 # 25ms, given rating of settling time + how long to switch directions (avg.) 
 
 # constants
@@ -148,5 +152,3 @@ def control_step(tracks, track_states, frame_idx, laser, mirror):
         "aim_x": float(cmd["aim"][0]),
         "aim_y": float(cmd["aim"][1]),
     }
-
-
