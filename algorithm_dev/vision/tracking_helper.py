@@ -1,7 +1,6 @@
 ﻿import cv2
 from algorithm_dev.vision.track import Track
 import numpy as np
-from scipy.optimize import linear_sum_assignment
 
 
 # constants to access 
@@ -61,7 +60,7 @@ def detect_moving_objects_fast(prev_gray, curr_gray):
     #thresh = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel3) #temp disable, keep closed only
     thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel5) #closing thresh
 
-    num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(thresh)
+    num_labels, _, stats, centroids = cv2.connectedComponentsWithStats(thresh)
 
     detections = []
     for i in range(1, num_labels):
@@ -182,8 +181,5 @@ def deduplicate_tracks(tracks, radius=20, vel_thresh=30): #TODO FIX THIS TO IMPR
         if not duplicate: 
             keep.append(t)
             grid[key] = t
-        #if not any(np.linalg.norm(
-         #   np.array(t.last_position) - np.array(k.last_position)
-        #) < radius for k in keep): 
-         #   keep.append(t)
+
     return keep

@@ -11,7 +11,7 @@ from algorithm_dev.vision.state_defs import *
 
 ENGAGE_RADIUS = 120       # px from laser center
 MIN_SPEED = 2.0           # px/frame
-MAX_COV_THRESHOLD = 100 #TODO see if i need to tune this value
+MAX_COV_THRESHOLD = 50 #TODO may need to increase to 100 again in the field 
 SPOT_RADIUS_MM = 1.7 # laser spot radius in mm #TODO get actual estimate 
 # empirical estimates
 MM_PER_PX = 0.533 # mm per pixel
@@ -33,6 +33,7 @@ SYSTEM_LATENCY = 0.075 + MIN_FIRE_TIME# (listed in seconds) #TODO tweak this val
 PREDICT_HORIZON =  int(SYSTEM_LATENCY/ FRAME_DT) #8 #int(SYSTEM_LATENCY/FRAME_DT) # num. of frames TODO change/refine eventually
 #UNCERTAINTY_PENALTY = 0.5 
 ARENA_DIAG = np.hypot(1600, 1200) #~2000 px
+
 DEBUG_SCORING = False  # set True only when debugging
 
 # function definitions
@@ -122,7 +123,7 @@ def score_track(track, state, beam_position):
     # === mirror travel cost === 
     mirror_delta = float(np.linalg.norm(prediction - np.asarray(beam_position)))
     mirror_pos_normalized = 1.0 - (mirror_delta / ARENA_DIAG) #0-1 range; 1= mirror already there#TODO figure out if this is necessary 
-    mirror_cost = max(1.0, mirror_pos_normalized) #floor at 0.1 so far targets still score 
+    mirror_cost = max(0.1, mirror_pos_normalized) #floor at 0.1 so far targets still score 
 
     # === motion state weighting (hovering first) === 
     vx = float(track.kf.statePost[2,0])

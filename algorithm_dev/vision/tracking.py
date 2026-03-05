@@ -8,13 +8,6 @@
 #imports
 import cv2
 import time
-import sys
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-from collections import deque
-from algorithm_dev.vision.camera_interface import Camera
-from algorithm_dev.vision.track import Track
 from algorithm_dev.vision.state import classify_state
 from algorithm_dev.vision.tracking_helper import *
 
@@ -31,7 +24,7 @@ def process_video(camera, display=False):
     # instantiate empty arrays for tracking and latency calculations
     next_track_id = 0 
     #explicit multi-target capacity metrics
-    tracks, latencies, det_counts, track_counts= [], [], [], []
+    tracks = []
     # kalman state factoring   
     track_states = {}
     frame_idx = 0
@@ -43,7 +36,7 @@ def process_video(camera, display=False):
     while frame is None:
         frame = camera.get_frame()
 
-    prev_gray, roi_offset = preprocess_and_crop(frame)
+    prev_gray, _ = preprocess_and_crop(frame)
     last_time = None
     
     #begin loop, occurs over duration of video
@@ -54,7 +47,7 @@ def process_video(camera, display=False):
             frame = camera.get_frame() # start stream
             # tolerate dropped frames
             if frame is None: 
-                print("[VISION] None frame")
+                #print("[VISION] None frame")
                 continue
 
             vision_start = time.perf_counter() #records detection speed
@@ -69,29 +62,25 @@ def process_video(camera, display=False):
             last_time = now
     
              # Preprocess & crop
-            start = time.perf_counter()
             # don't need to crop frame anymore since FOV is about size from video (24 inches x 24 inch board)
             try: 
                 curr_gray, _ = preprocess_and_crop(frame)
             except Exception as e: 
-                print(f"[VISION preprocess failed: {e}")
+                #print(f"[VISION preprocess failed: {e}")
                 import traceback; traceback.print_exc()
                 continue
-            t_preprocess = time.perf_counter() - start
     
             # Moving detection
-            start = time.perf_counter()
             try:
 
-                detections, thresh = detect_moving_objects_fast(prev_gray, curr_gray)
+                detections, _ = detect_moving_objects_fast(prev_gray, curr_gray)
             except Exception as e: 
-                print(f"[VISION] detection failed: {e}")
+                #print(f"[VISION] detection failed: {e}")
                 import traceback; traceback.print_exc()
                 continue
-            t_move = time.perf_counter() - start
+
     
             # tracking only (no merging) 
-            start = time.perf_counter()
             try:
                 tracks, next_track_id = associate_detections_to_tracking_fast(
                         detections, tracks, next_track_id,
@@ -101,26 +90,18 @@ def process_video(camera, display=False):
                 if frame_idx % 3 == 0: # run less often (i.e. less expensive)
                     tracks = deduplicate_tracks(tracks) # one track per fly, protect stationary leak
             except Exception as e:
-                print(f"[VISION] tracking failed: {e}")
+                #print(f"[VISION] tracking failed: {e}")
                 import traceback; traceback.print_exc()
                 continue
-            t_tracking = time.perf_counter() - start
 
             now = time.time()
             #kalman calculations (tracking and state update)
             try:
                 for t in tracks: #TODO see if we should move this to be before association
                     t.predict(dt)
-                    x, y, vx, vy = t.kf.statePost[:,0] #consolidate state calls
-                    cov = t.kf.errorCovPost
-                #vx = t.kf.statePost[2, 0]
-                #vy = t.kf.statePost[3, 0]
-                    speed = t.speed()
-                
-                #if frame_idx %3 == 0: # only track every 3 frames to gauge velocity better
-                    track_states[t.id] = classify_state(t) # just look every frame, trivial cost
+                    track_states[t.id] = classify_state(t) # look every frame, trivial cost increase
             except Exception as e: 
-                print(f"[VISION] kalman failed: {e}")
+                #print(f"[VISION] kalman failed: {e}")
                 import traceback; traceback.print_exc()
                 continue
 

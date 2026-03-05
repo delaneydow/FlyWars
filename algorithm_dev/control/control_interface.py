@@ -3,13 +3,8 @@
 from algorithm_dev.control.planner import plan_targets, LASER_COOLDOWN_FRAMES
 import numpy as np
 import time
-from algorithm_dev.control.laser_interface import LaserInterface
-from algorithm_dev.control.mirror_planner import MirrorPlanner
-from algorithm_dev.control.laser_interface import LaserInterface
-from algorithm_dev.control.mirror_planner import MirrorPlanner
 from algorithm_dev.control.object_scoring import SPOT_RADIUS_PX_SAFE, PREDICT_HORIZON, predict_position
 
-mirror_settle_time = 0.015 # 25ms, given rating of settling time + how long to switch directions (avg.) 
 mirror_settle_time = 0.015 # 25ms, given rating of settling time + how long to switch directions (avg.) 
 
 # constants
@@ -35,7 +30,7 @@ def fire_with_tracking(laser, mirror, cmd, tracks, track_states):
 
     #read MCU ack 
     try:
-        resp = laser.ser.readline().decode().strip()
+        laser.ser.readline().decode().strip()
     except Exception:
         pass
 
@@ -47,7 +42,6 @@ def fire_with_tracking(laser, mirror, cmd, tracks, track_states):
 
     while hit_time < MIN_HIT_TIME:
         now = time.perf_counter()
-        elapsed = now - fire_start
 
         # safety timeout — don't fire forever
         if now - fire_start > MIN_HIT_TIME * 4:  # hard safety timeout
@@ -68,7 +62,7 @@ def fire_with_tracking(laser, mirror, cmd, tracks, track_states):
             # find the target track
             target = next((t for t in tracks if t.id == target_id), None)
             if target is None:
-                print("[FIRE] target lost — ending fire")
+                #print("[FIRE] target lost — ending fire")
                 break
 
             # predict current position
@@ -86,7 +80,8 @@ def fire_with_tracking(laser, mirror, cmd, tracks, track_states):
                     cmd["aim"] = pred
                     settling = True
                     settle_start = now
-                    print(f"[FIRE] redirecting, dist={dist:.1f}px")
+                    redirect_count += 1
+                    #print(f"[FIRE] redirecting, dist={dist:.1f}px")
 
     laser.ser.write(b"OFF\n")
     laser.ser.flush()
@@ -96,10 +91,15 @@ def fire_with_tracking(laser, mirror, cmd, tracks, track_states):
         pass
     laser.ready = True
 
+    confirmed = hit_time >= MIN_HIT_TIME
     total = time.perf_counter() - fire_start
-    print(f"[FIRE] hit={hit_time:.3f}s total={total:.3f}s confirmed={hit_time >= MIN_HIT_TIME}")
-    return hit_time >= MIN_HIT_TIME
-
+    #print(f"[FIRE] hit={hit_time:.3f}s total={total:.3f}s confirmed={hit_time >= MIN_HIT_TIME}")
+    return {
+        "confirmed": confirmed,
+        "hit_time": round(hit_time, 3),
+        "total_time": round(total, 3),
+        "redirects": redirect_count,
+    }
 
 
 def control_step(tracks, track_states, frame_idx, laser, mirror):
@@ -132,13 +132,12 @@ def control_step(tracks, track_states, frame_idx, laser, mirror):
 
     # fire laser on highest-priority ranked target, first planned shot per frame
     cmd = plan[0] #highest priority target 
-    u, v = mirror.find_uv_for_xy(*cmd["aim"]) #compute u & v
-
-    mirror.send_uv(u, v) # use local u, v
+    #u, v = mirror.find_uv_for_xy(*cmd["aim"]) #compute u & v
+    #mirror.send_uv(u, v) # use local u, v
     if DEBUG_CNTRL:
         print(f"[FIRE] track={cmd['track_id']} aim={cmd['aim']} uv=({cmd['u']:.3f},{cmd['v']:.3f})")
     #laser.fire()
-    hit_confirmed = fire_with_tracking(laser, mirror, cmd, tracks, track_states)
+    hit_result = fire_with_tracking(laser, mirror, cmd, tracks, track_states)
     if DEBUG_CNTRL:
         print(f"[FIRE] laser fired")
 
@@ -151,4 +150,7 @@ def control_step(tracks, track_states, frame_idx, laser, mirror):
         "score": cmd["score"],
         "aim_x": float(cmd["aim"][0]),
         "aim_y": float(cmd["aim"][1]),
+        "hit_time": hit_result["hit_time"],
+        "hit_confirmed": hit_result["confirmed"],
+        "redirects": hit_result["redirects"]
     }

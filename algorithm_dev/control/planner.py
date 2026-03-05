@@ -10,12 +10,14 @@ Prioritization by: sort by score, respect laser cooldown period, predict aim poi
 
 import numpy as np
 from algorithm_dev.control.object_scoring import(
-        score_track, predict_position, PREDICT_HORIZON, MAX_COV_THRESHOLD, SPOT_RADIUS_PX_SAFE, FRAME_DT)
+        score_track, MAX_COV_THRESHOLD, SPOT_RADIUS_PX_SAFE, FRAME_DT)
 from algorithm_dev.vision.state_defs import *
 
 
 # === DECLARE CONSTANTS ===
 LASER_COOLDOWN_FRAMES = int(0.25/ FRAME_DT) # minimum firing time / FPS 
+
+SCORE_DEBUG = False
 
 # === DEFINE FUNCTIONS ===
 
@@ -31,9 +33,11 @@ def plan_targets(tracks, track_states, beam_position, frame_idx):
         pred = getattr(t, "cached_prediction", None)
         cov = t.kf.errorCovPost
         uncertainty = cov[0,0] + cov[1,1]
-        print(f" [SCORE DEBUG] track {t.id} state={state} pred={pred} uncertainty={uncertainty:.2f}")
+        if SCORE_DEBUG:
+            print(f" [SCORE DEBUG] track {t.id} state={state} pred={pred} uncertainty={uncertainty:.2f}")
         score = score_track(t, state, beam_position)
-        print(f" [SCORE DEBUG] track {t.id} score={score:.4f}")
+        if SCORE_DEBUG:
+            print(f" [SCORE DEBUG] track {t.id} score={score:.4f}")
         if score > 0: 
             scored.append({
                 "score": score,

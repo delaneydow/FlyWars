@@ -1,4 +1,4 @@
-﻿import pandas as pd
+﻿
 import time
 import signal
 import sys
@@ -8,7 +8,6 @@ from algorithm_dev.control.cooldown import get_cpu_temp, adaptive_cooldown
 from algorithm_dev.control.object_scoring import SPOT_RADIUS_PX_SAFE
 
 # import Tracking pipeline
-from algorithm_dev.vision.track import Track #import Track class, TODO see if track needs to be passed/accessed
 from algorithm_dev.vision.tracking import process_video
 from algorithm_dev.control.laser_interface import LaserInterface
 from algorithm_dev.control.mirror_planner import MirrorPlanner
@@ -161,6 +160,12 @@ def main():
 
                 writer.log_fire(result)
 
+                writer.log_track(packet["frame"], packet["tracks"], packet["states"])
+
+                #print status periodically
+                if packet["frame"] % 12000 == 0: #at 40 fps this is every ~5 minutes
+                    print(f"[STATUS] frame={packet['frame']}, time={time.strftime('%H:%M:%S')}, temp={cpu_temp}°C")
+
             except Exception as e: 
                 print(f"[LOOP ERROR]: {e}")
                 import traceback
@@ -172,6 +177,7 @@ def main():
     #TODO maybe occasionally print updates
     finally: 
         emergency_stop(None, None) #shutdown as default 
+        writer.close()
         print ("emergency stop completed.")
         sys.exit(0)
 

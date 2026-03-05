@@ -8,7 +8,7 @@ import sys
 
 LASER_PIN = 4
 PWM_FREQ = 500          # Hz
-FIRE_DUTY = 32768       # 50% duty (0–65535)
+FIRE_DUTY = 65535       # 100% duty (0–65535)
 
 
 # SETUP PWM ONCE

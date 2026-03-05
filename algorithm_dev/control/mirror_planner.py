@@ -10,7 +10,6 @@ import numpy as np
 from matplotlib.path import Path as MplPath
 from scipy.spatial import cKDTree #make mirror path / calibration faster 
 import serial # for access with mre-3 serial port 
-import time
 
 
 class MirrorPlanner: 
@@ -106,10 +105,10 @@ class MirrorPlanner:
         # Optional: read echo / status
         if self.ser.in_waiting:
             resp = self.ser.read(self.ser.in_waiting)
-            print("[Mirror response]", resp.decode(errors='ignore'))
+            #print("[Mirror response]", resp.decode(errors='ignore'))
     
     def off(self): 
-        print("[MIRROR] CENTER + STOP")
+        #print("[MIRROR] CENTER + STOP")
         try: 
             self.send_uv(0.0, 0.0) #use existing module to send command
         except Exception:
