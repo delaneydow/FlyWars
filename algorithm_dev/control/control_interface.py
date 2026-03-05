@@ -6,7 +6,7 @@ from algorithm_dev.control.laser_interface import LaserInterface
 from algorithm_dev.control.mirror_planner import MirrorPlanner
 from algorithm_dev.control.object_scoring import SPOT_RADIUS_PX_SAFE, PREDICT_HORIZON, predict_position
 
-mirror_settle_time = 0.025 # 25ms, given rating of settling time + how long to switch directions (avg.) 
+mirror_settle_time = 0.015 # 25ms, given rating of settling time + how long to switch directions (avg.) 
 
 # constants
 beam_position = np.array([512, 384])  # TODO figure out 0,0 origin, initialize once 
@@ -14,7 +14,7 @@ beam_position = np.array([512, 384])  # TODO figure out 0,0 origin, initialize o
 DEBUG_CNTRL = False  # set True only when debugging
 DEBUG_SCORE = False 
 
-HIT_VERIFY_INTERVAL = 0.05  # check every 50ms during fire
+HIT_VERIFY_INTERVAL = 0.025  # check every 25ms during fire
 MIN_HIT_TIME = 0.25          # required hit duration
 
 def fire_with_tracking(laser, mirror, cmd, tracks, track_states):

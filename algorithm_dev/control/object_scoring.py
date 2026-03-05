@@ -6,7 +6,6 @@
 
 #imports
 import numpy as np
-from pydantic import _getattr_migration
 from algorithm_dev.vision.state_defs import *
 # tunable constants
 
@@ -32,12 +31,9 @@ laser_trigger_latency = 1 #modulation delay + thermal dwell constraint
 FRAME_DT = 1/120.0 # seconds per frame
 SYSTEM_LATENCY = 0.075 + MIN_FIRE_TIME# (listed in seconds) #TODO tweak this value!!! 
 PREDICT_HORIZON =  int(SYSTEM_LATENCY/ FRAME_DT) #8 #int(SYSTEM_LATENCY/FRAME_DT) # num. of frames TODO change/refine eventually
-UNCERTAINTY_PENALTY = 0.5 
-
+#UNCERTAINTY_PENALTY = 0.5 
+ARENA_DIAG = np.hypot(1600, 1200) #~2000 px
 DEBUG_SCORING = False  # set True only when debugging
-
-if DEBUG_SCORING:
-    print(f"  [SCORE DEBUG] ...")
 
 # function definitions
 
@@ -125,7 +121,8 @@ def score_track(track, state, beam_position):
 
     # === mirror travel cost === 
     mirror_delta = float(np.linalg.norm(prediction - np.asarray(beam_position)))
-    mirror_cost = 1.0 / (1.0+ mirror_delta) #TODO figure out if this is necessary 
+    mirror_pos_normalized = 1.0 - (mirror_delta / ARENA_DIAG) #0-1 range; 1= mirror already there#TODO figure out if this is necessary 
+    mirror_cost = max(1.0, mirror_pos_normalized) #floor at 0.1 so far targets still score 
 
     # === motion state weighting (hovering first) === 
     vx = float(track.kf.statePost[2,0])

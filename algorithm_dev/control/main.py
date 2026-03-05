@@ -118,8 +118,7 @@ def main():
                         laser.off()
                     if mirror: 
                         mirror.off()
-    
-                last_packet_time = now #system kills on lag 
+     
 
                 # pause handling 
                 while PAUSED:
@@ -137,6 +136,7 @@ def main():
                                 packet["frame"],
                                 laser,
                                 mirror)
+                last_packet_time = time.perf_counter() #reset watchdog after blocking fire
 
                 #CPU / thermal monitoring (from cooldown.py)
                 cpu_temp = get_cpu_temp()

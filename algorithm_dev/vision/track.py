@@ -73,6 +73,8 @@ class Track:
         self.kf.processNoiseCov[3,3] = q 
 
         pred = self.kf.predict()
+        # cap covariance to prevent runaway divergence during missed frames
+        np.clip(self.kf.errorCovPost, 0, 500, out=self.kf.errorCovPost)
         return pred[0,0], pred[1,0]
 
     def update(self, detection=None, dt=1/60.0): #TODO use effective dt = frame_dt + system_latency

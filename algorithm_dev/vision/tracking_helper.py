@@ -72,12 +72,12 @@ def detect_moving_objects_fast(prev_gray, curr_gray):
     return detections, thresh
 
 
-def associate_detections_to_tracking_fast(detections, tracks, next_id): #TODO take out dt 
+def associate_detections_to_tracking_fast(detections, tracks, next_id, dt=1/60.0): #TODO take out dt 
 
     # CASE 1: NO DETECTIONS
     if not detections: 
         for t in tracks: 
-            t.update(None)
+            t.update(None, dt=dt)
         return [t for t in tracks if t.missed <= MAX_MISSED], next_id
 
     used = [False] * len(detections)
@@ -107,7 +107,7 @@ def associate_detections_to_tracking_fast(detections, tracks, next_id): #TODO ta
             track_matches[ti] = best_i
             used[best_i] = True
         else:
-            t.update(None)
+            t.update(None, dt=dt)
 
     # CASE 3: create new tracks
     for di, d in enumerate(detections): 
@@ -118,7 +118,7 @@ def associate_detections_to_tracking_fast(detections, tracks, next_id): #TODO ta
        
     # CASE 4: remove and prune old tracks
     for ti, di in track_matches.items():
-        tracks[ti].update(detections[di])
+        tracks[ti].update(detections[di], dt=dt)
     tracks = [t for t in tracks if t.missed <=MAX_MISSED]
 
     return tracks, next_id
