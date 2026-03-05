@@ -1,12 +1,40 @@
-﻿#control_interface.py
+﻿# control_interface.py
 from algorithm_dev.control.planner import plan_targets, LASER_COOLDOWN_FRAMES
 import numpy as np
 import time
-from algorithm_dev.control.laser_interface import LaserInterface
-from algorithm_dev.control.mirror_planner import MirrorPlanner
+#from algorithm_dev.control.laser_interface import LaserInterface
+#from algorithm_dev.control.mirror_planner import MirrorPlanner
 from algorithm_dev.control.object_scoring import SPOT_RADIUS_PX_SAFE, PREDICT_HORIZON, predict_position
 
-mirror_settle_time = 0.015 # 25ms, given rating of settling time + how long to switch directions (avg.) 
+# classes
+laser = None
+mirror = None
+
+
+def init_hardware(
+    laser_obj=None,
+    mirror_obj=None
+):
+    """
+    Allows real hardware OR test mocks.
+    """
+    global laser, mirror
+
+    if laser_obj is not None:
+        laser = laser_obj
+    else:
+        from algorithm_dev.control.laser_interface import LaserInterface
+        laser = LaserInterface()
+
+    if mirror_obj is not None:
+        mirror = mirror_obj
+    else:
+        from algorithm_dev.control.mirror_planner import MirrorPlanner
+        mirror = MirrorPlanner(
+            map_file="mirror_map1.npz",
+            spot_radius_px=SPOT_RADIUS_PX_SAFE
+        )
+mirror_settle_time = 0.25 # seconds, given rating of settling time + how long to switch directions (avg.) 
 
 # constants
 beam_position = np.array([512, 384])  # TODO figure out 0,0 origin, initialize once 

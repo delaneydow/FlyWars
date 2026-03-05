@@ -9,10 +9,12 @@ from algorithm_dev.control.object_scoring import SPOT_RADIUS_PX_SAFE
 
 # import Tracking pipeline
 from algorithm_dev.vision.track import Track #import Track class, TODO see if track needs to be passed/accessed
-from algorithm_dev.vision.tracking import process_video
-from algorithm_dev.control.laser_interface import LaserInterface
-from algorithm_dev.control.mirror_planner import MirrorPlanner
+#from algorithm_dev.vision.tracking import process_video
+#from algorithm_dev.control.laser_interface import LaserInterface
+#from algorithm_dev.control.mirror_planner import MirrorPlanner
 from algorithm_dev.Writer import Writer
+from algorithm_dev.control.control_interface import init_hardware
+from algorithm_dev.control.control_interface import init_hardware
 
 # === latency settings ===
 FRAME_DT = 1/120.0
@@ -56,6 +58,7 @@ def main():
     global mirror, laser , PAUSED
 
     print("[SYSTEM] Initializing hardware...")
+    init_hardware() 
 
     # camera set up
     try:
