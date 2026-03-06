@@ -39,6 +39,7 @@ def fire_with_tracking(laser, mirror, cmd, tracks, track_states):
     last_check = fire_start
     settling = False
     settle_start = None
+    redirect_count = 0
 
     while hit_time < MIN_HIT_TIME:
         now = time.perf_counter()

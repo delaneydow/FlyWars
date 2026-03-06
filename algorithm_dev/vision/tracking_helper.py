@@ -4,8 +4,8 @@ import numpy as np
 
 
 # constants to access 
-THRESH_VAL = 20 # frame subtraction threshold - reduce noise triggering
-MIN_AREA = 15 # minimum blob area (pixels)
+THRESH_VAL = 10 # frame subtraction threshold - reduce noise triggering
+MIN_AREA = 5 # minimum blob area (pixels)
 MAX_AREA = 800 # max blob area (pixels)
 MAX_MISSED = 3 # allows tracks to survive N frames without a detection
 MAX_TRACK_DIST = 40 # max distance for track association (pixels), need to be a bit because the objects are falling / flying
