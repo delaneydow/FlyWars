@@ -12,6 +12,9 @@ def analyze_video(video_path, min_hit_time = 0.25, spot_threshold=220, min_spot_
 
     cap = cv2.VideoCapture(video_path)
     fps = cap.get(cv2.CAP_PROP_FPS)
+    if fps == 0: 
+        fps = 25.0 # fallback, this is what it supposedly encodes the video as
+        print(f"[WARNING] could not read FPS from file, assuming {fps} fps")
     frame_duration = 1.0 / fps
 
     #sampling unvertainty --> +/- one frame duration at each edge
@@ -148,10 +151,31 @@ def analyze_video(video_path, min_hit_time = 0.25, spot_threshold=220, min_spot_
 
     return results
 
+def test_thresholds(path): 
+    cap = cv2.VideoCapture(path)
+
+    # sample a few frames to find brightness range
+    for target_frame in [10, 50, 100, 200]:
+        cap.set(cv2.CAP_PROP_POS_FRAMES, target_frame)
+        ret, frame = cap.read()
+        if not ret:
+            continue
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) if frame.ndim == 3 else frame
+        print(f"Frame {target_frame}: min={gray.min()} max={gray.max()} mean={gray.mean():.1f} "
+            f"| >200: {np.sum(gray>200)} | >150: {np.sum(gray>150)} "
+            f"| >100: {np.sum(gray>100)} | >50: {np.sum(gray>50)}")
+
+    cap.release()
+
 
 if __name__ == "__main__":
     import sys
-    path = sys.argv[1] if len(sys.argv) > 1 else "hit_test.avi"
+    import os
+    path = r"C:\Users\dmdow\Documents\GitHub\FlyWars\testing\LUCID_TRI050S1-P_233300222__20260306133139087_video2.mp4"
     min_hit = float(sys.argv[2]) if len(sys.argv) > 2 else 0.25
     threshold = int(sys.argv[3]) if len(sys.argv) > 3 else 220
     analyze_video(path, min_hit_time=min_hit, spot_threshold=threshold)
+    
+    
+    
+    
