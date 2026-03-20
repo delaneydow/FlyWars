@@ -1,6 +1,6 @@
-# laser_gpio.py
+﻿# laser_gpio.py
 
-from machine import Pin, PWM
+from machine import Pin, PWM, Timer
 import sys
 
 
@@ -16,6 +16,14 @@ laser_pwm = PWM(Pin(LASER_PIN))
 laser_pwm.freq(PWM_FREQ)
 laser_pwm.duty_u16(0)   # laser OFF
 
+_timer = Timer(-1) #software timer
+
+def _off_cb(t):
+    laser_pwm.duty_u16(0)
+    sys.stdout.write("DONE\n")
+    sys.stdout.flush()
+
+
 
 while True:
     cmd = sys.stdin.readline()
@@ -26,11 +34,23 @@ while True:
         laser_pwm.duty_u16(FIRE_DUTY)
         sys.stdout.write("OK\n")
         sys.stdout.flush()
+    elif cmd.startswith("FIRE "):
+        # fire for exactly N millseconds
+        try: 
+            ms = int(cmd.split()[1])
+            _timer.deinit() # cancel any prior timer
+            laser_pwm.duty_u16(FIRE_DUTY)
+            sys.stdout.write("OK\n")
+            sys.stdout.flush()
+            _timer.init(mode=Timer.ONE_SHOT, period=ms, callback=_off_cb)
+        except Exception:
+            pass 
     elif cmd == "OFF":
+        _timer.deinit()
         laser_pwm.duty_u16(0)
         sys.stdout.write("OK\n")
         sys.stdout.flush()
-    elif cmd.startswith("DUTY"):
+    elif cmd.startswith("DUTY "): 
         try:
             _, val = cmd.split()
             laser_pwm.duty_u16(int(val))

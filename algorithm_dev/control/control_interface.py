@@ -3,9 +3,7 @@
 from algorithm_dev.control.planner import plan_targets, LASER_COOLDOWN_FRAMES
 import numpy as np
 import time
-from algorithm_dev.control.object_scoring import SPOT_RADIUS_PX_SAFE, PREDICT_HORIZON, predict_position
-
-mirror_settle_time = 0.015 # 25ms, given rating of settling time + how long to switch directions (avg.) 
+from algorithm_dev.control.object_scoring import SPOT_RADIUS_PX_SAFE, PREDICT_HORIZON, predict_position 
 
 # constants
 beam_position = np.array([512, 384])  # TODO figure out 0,0 origin, initialize once 
@@ -13,19 +11,18 @@ beam_position = np.array([512, 384])  # TODO figure out 0,0 origin, initialize o
 DEBUG_CNTRL = False  # set True only when debugging
 DEBUG_SCORE = False 
 
-HIT_VERIFY_INTERVAL = 0.025  # check every 25ms during fire
-MIN_HIT_TIME = 0.25          # required hit duration
+HIT_VERIFY_INTERVAL = 0.010  # check every 10ms during fire
+MIN_HIT_TIME_MS = 250          # required hit duration (ms)
 
 def fire_with_tracking(laser, mirror, cmd, tracks, track_states):
     """Fire laser while verifying beam stays on target for MIN_HIT_TIME."""
 
     target_id = cmd["track_id"]
     u, v = mirror.find_uv_for_xy(*cmd["aim"])
-    mirror.send_uv(u, v)
-    time.sleep(mirror_settle_time)
+    mirror.send_uv(u, v) # blocks until settled - safe to fire immediately after
 
     # start firing
-    laser.ser.write(b"FIRE\n")
+    laser.ser.write(b"FIRE {MIN_HIT_TIME_MS}\n".encode()) #send timed fire command - MCU owns time keeping for 250 ms
     laser.ser.flush()
 
     #read MCU ack 
@@ -35,69 +32,52 @@ def fire_with_tracking(laser, mirror, cmd, tracks, track_states):
         pass
 
     fire_start = time.perf_counter()
-    hit_time = 0.0
-    last_check = fire_start
-    settling = False
-    settle_start = None
+    #hit_time = 0.0
     redirect_count = 0
+    aborted = False 
 
-    while hit_time < MIN_HIT_TIME:
+
+    # loop redirects laser or aborts -- duration is job of MCU
+    while time.perf_counter() - fire_start < (MIN_HIT_TIME_MS / 1000) * 4:
         now = time.perf_counter()
+        elapsed = now - fire_start
 
-        # safety timeout — don't fire forever
-        if now - fire_start > MIN_HIT_TIME * 4:  # hard safety timeout
-            print("[FIRE] safety timeout")
-            break
+        # check for MCU done signal (non-blocking)
+        if laser.ser.in_waiting: 
+            msg = laser.ser.readline().decode.strip()
+            if msg == "DONE":
+                break # MCU finished its time window
 
-          # if mirror is settling after a redirect, wait before counting hit time
-        if settling:
-            if now - settle_start >= mirror_settle_time:
-                settling = False
-            else:
-                continue
-
-        # check every interval
-        if now - last_check >= HIT_VERIFY_INTERVAL:
-            last_check = now
-
-            # find the target track
+        if elapsed < (MIN_HIT_TIME_MS / 1000): #still within expected window
             target = next((t for t in tracks if t.id == target_id), None)
-            if target is None:
-                #print("[FIRE] target lost — ending fire")
+            if target is None: 
+                laser.ser.write(b"OFF\n")
+                laser.ser.flush()
+                aborted = True
                 break
-
-            # predict current position
-            pred, _ = predict_position(target, k=0)  # k=0 = current state
+            
+            pred, _ = predict_position(target, k=0) # k=0, current state
             dist = float(np.linalg.norm(pred - np.asarray(cmd["aim"])))
 
-            # check if spot covers target — use 2x spot radius as tolerance
-            if dist < SPOT_RADIUS_PX_SAFE * 2:
-                hit_time += HIT_VERIFY_INTERVAL
-            else:
-                # only redirect if target has moved more than one spot radius
-                if dist > SPOT_RADIUS_PX_SAFE:
-                    new_u, new_v = mirror.find_uv_for_xy(*pred)
-                    mirror.send_uv(new_u, new_v)
-                    cmd["aim"] = pred
-                    settling = True
-                    settle_start = now
-                    redirect_count += 1
-                    #print(f"[FIRE] redirecting, dist={dist:.1f}px")
+        
+            if dist > SPOT_RADIUS_PX_SAFE:
+                new_u, new_v = mirror.find_uv_for_xy(*pred)
+                mirror.send_uv(new_u, new_v)
+                cmd["aim"] = pred
+                settling = True
+                settle_start = now
+                redirect_count += 1
+                #print(f"[FIRE] redirecting, dist={dist:.1f}px")
 
-    laser.ser.write(b"OFF\n")
-    laser.ser.flush()
-    try:
-        laser.ser.readline()
-    except Exception:
-        pass
+        time.sleep(HIT_VERIFY_INTERVAL)
+
     laser.ready = True
-
-    confirmed = hit_time >= MIN_HIT_TIME
     total = time.perf_counter() - fire_start
+
     #print(f"[FIRE] hit={hit_time:.3f}s total={total:.3f}s confirmed={hit_time >= MIN_HIT_TIME}")
     return {
-        "confirmed": confirmed,
-        "hit_time": round(hit_time, 3),
+        "confirmed": not aborted,
+        "hit_time": round(min(total, MIN_HIT_TIME_MS / 1000), 3)
         "total_time": round(total, 3),
         "redirects": redirect_count,
     }

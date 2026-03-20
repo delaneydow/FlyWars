@@ -10,6 +10,23 @@ import numpy as np
 from matplotlib.path import Path as MplPath
 from scipy.spatial import cKDTree #make mirror path / calibration faster 
 import serial # for access with mre-3 serial port 
+import time
+
+#MRE-3 settling spec anchor points
+_SETTLE_DEG_SMALL = 0.1
+_SETTLE_MS_SMALL = 2.0
+_SETTLE_DEG_LARGE = 10.0
+_SETTLE_MS_LARGE = 8.0
+_DEG_PER_UNIT = 25.0
+
+_SETTLE_SLOPE = (_SETTLE_MS_LARGE - _SETTLE_MS_SMALL) / (_SETTLE_DEG_LARGE - _SETTLE_DEG_SMALL)
+
+def _settle_time_s(delta_u: float, delta_v: float) -> float: 
+    "Compute settle time from move magnitude in input units"
+    delta_deg = np.hypot(delta_u, delta_v) * _DEG_PER_UNIT
+    delta_deg = np.clip(delta_deg, _SETTLE_DEG_SMALL, _SETTLE_DEG_LARGE)
+    ms = _SETTLE_MS_SMALL+ _SETTLE_SLOPE * (delta_deg - _SETTLE_DEG_SMALL)
+    return max(ms, _SETTLE_FLOOR_MS) / 1000.0
 
 
 class MirrorPlanner: 
@@ -42,6 +59,9 @@ class MirrorPlanner:
         self.spot_radius_px = spot_radius_px or 6.0 #TODO figure out how to integrate this again
 
         self._xy_tree = cKDTree(np.column_stack([self.x_map, self.y_map]))
+        
+        # trackk= current mirror position for delta-based settle calc
+        self._current_uv = (0.0, 0.0) #assume centered at init
 
     def clamp_uv(self, u, v): 
         return(
@@ -88,24 +108,26 @@ class MirrorPlanner:
 
         " Send U/V coordinates as X/Y commands to MRE-3 via USB serial "
         "MRE-3 Expects X and Y within range -1.0 to 1.0 (already calibrated for)"
-
+        "block until mirror has settled"
 
         # Clamp values just to be safe
         u = float(np.clip(u, -1.0, 1.0))
         v = float(np.clip(v, -1.0, 1.0))
 
-        # Proper command format
-        cmd_x = f"X={u:.3f}\r\n"
-        cmd_y = f"Y={v:.3f}\r\n"
+        delta_u = u - self._current_uv[0]
+        delta_v = v - self._current_uv[1]
+        settle = _settle_time_s(delta_u, delta_v)
 
-        # Send to serial port
-        self.ser.write(cmd_x.encode())
-        self.ser.write(cmd_y.encode())
+        # Send to serial port as one command
+        self.ser.write(f"XY={u:.3f};{v:.3f}\r\n".encode())
 
         # Optional: read echo / status
         if self.ser.in_waiting:
             resp = self.ser.read(self.ser.in_waiting)
             #print("[Mirror response]", resp.decode(errors='ignore'))
+
+        self._current_uv = (u, v)
+        time.sleep(settle)
     
     def off(self): 
         #print("[MIRROR] CENTER + STOP")
