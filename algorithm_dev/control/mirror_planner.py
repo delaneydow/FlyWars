@@ -18,6 +18,7 @@ _SETTLE_MS_SMALL = 2.0
 _SETTLE_DEG_LARGE = 10.0
 _SETTLE_MS_LARGE = 8.0
 _DEG_PER_UNIT = 25.0
+_SETTLE_FLOOR_MS = 0.5
 
 _SETTLE_SLOPE = (_SETTLE_MS_LARGE - _SETTLE_MS_SMALL) / (_SETTLE_DEG_LARGE - _SETTLE_DEG_SMALL)
 
@@ -30,7 +31,7 @@ def _settle_time_s(delta_u: float, delta_v: float) -> float:
 
 
 class MirrorPlanner: 
-    def __init__(self, port="/dev/serial/by-id/usb-Optotune_Virtual_ComPort_3578335B3233-if00", baud=115200, map_file="mirror_map1.npz", spot_radius_px=None):
+    def __init__(self, port="/dev/serial/by-id/usb-Optotune_Virtual_ComPort_3578335B3233-if00", baud=115200, map_file="mirror_map.npz", spot_radius_px=None):
 
         # serial compatibility
         self.ser = serial.Serial(port, baud, timeout=0.01)
