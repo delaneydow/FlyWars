@@ -6,10 +6,10 @@ import time
 from algorithm_dev.control.object_scoring import SPOT_RADIUS_PX_SAFE, PREDICT_HORIZON, predict_position 
 
 # constants
-beam_position = np.array([512, 384])  # TODO figure out 0,0 origin, initialize once 
+beam_position = np.array([989.6, 620.2])  # initialized once, taken from 0,0 origin of mirror/beam centroid 
 
 DEBUG_CNTRL = False  # set True only when debugging
-DEBUG_SCORE = False 
+DEBUG_SCORE = False
 
 HIT_VERIFY_INTERVAL = 0.010  # check every 10ms during fire
 MIN_HIT_TIME_MS = 250          # required hit duration (ms)
@@ -22,7 +22,7 @@ def fire_with_tracking(laser, mirror, cmd, tracks, track_states):
     mirror.send_uv(u, v) # blocks until settled - safe to fire immediately after
 
     # start firing
-    laser.ser.write(b"FIRE {MIN_HIT_TIME_MS}\n".encode()) #send timed fire command - MCU owns time keeping for 250 ms
+    laser.ser.write(f"FIRE {MIN_HIT_TIME_MS}\n".encode()) #send timed fire command - MCU owns time keeping for 250 ms
     laser.ser.flush()
 
     #read MCU ack 
@@ -44,7 +44,7 @@ def fire_with_tracking(laser, mirror, cmd, tracks, track_states):
 
         # check for MCU done signal (non-blocking)
         if laser.ser.in_waiting: 
-            msg = laser.ser.readline().decode.strip()
+            msg = laser.ser.readline().decode().strip()
             if msg == "DONE":
                 break # MCU finished its time window
 
@@ -77,7 +77,7 @@ def fire_with_tracking(laser, mirror, cmd, tracks, track_states):
     #print(f"[FIRE] hit={hit_time:.3f}s total={total:.3f}s confirmed={hit_time >= MIN_HIT_TIME}")
     return {
         "confirmed": not aborted,
-        "hit_time": round(min(total, MIN_HIT_TIME_MS / 1000), 3)
+        "hit_time": round(min(total, MIN_HIT_TIME_MS / 1000), 3),
         "total_time": round(total, 3),
         "redirects": redirect_count,
     }
@@ -116,11 +116,13 @@ def control_step(tracks, track_states, frame_idx, laser, mirror):
     #u, v = mirror.find_uv_for_xy(*cmd["aim"]) #compute u & v
     #mirror.send_uv(u, v) # use local u, v
     if DEBUG_CNTRL:
-        print(f"[FIRE] track={cmd['track_id']} aim={cmd['aim']} uv=({cmd['u']:.3f},{cmd['v']:.3f})")
+        print(f"[FIRE] track={cmd['track_id']} aim={cmd['aim']}")
     #laser.fire()
+    t_start = time.perf_counter()
     hit_result = fire_with_tracking(laser, mirror, cmd, tracks, track_states)
+    t_end = time.perf_counter()
     if DEBUG_CNTRL:
-        print(f"[FIRE] laser fired")
+        print(f"[FIRE] laser fired for {(t_end-t_start)*1000:.1f}ms")
 
     beam_position = cmd["aim"] #stores last position of mirror, updated during tracking
 

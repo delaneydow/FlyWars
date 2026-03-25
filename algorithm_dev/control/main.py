@@ -79,7 +79,7 @@ def main():
 
     # mirror set up
     try:
-        mirror = MirrorPlanner(map_file="mirror_map1.npz", spot_radius_px = SPOT_RADIUS_PX_SAFE)  # initialize mirror
+        mirror = MirrorPlanner(map_file="mirror_map.npz", spot_radius_px = SPOT_RADIUS_PX_SAFE)  # initialize mirror
         mirror.off()  # ensure safe start
         print("[MIRROR] OK")
     except Exception as e:

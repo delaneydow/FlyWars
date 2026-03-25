@@ -7,8 +7,9 @@ class LaserInterface:
     def __init__(self, port="/dev/serial/by-id/usb-MicroPython_Board_in_FS_mode_e6641cb2cf162f27-if00", baud=115200): #port is microcontroller port
         self.ser = serial.Serial(port, baud, timeout=1)
         self.ready = False #not ready until sleep completes
-        time.sleep(5) #allow MCU reset/system reset and calibration
+        time.sleep(8) #allow MCU reset/system reset and calibration
         self.ser.reset_input_buffer() #clear any boot remnants 
+        self.ser.reset_output_buffer() # add buffer flashing
         self.ready = True
 
     def fire(self):
