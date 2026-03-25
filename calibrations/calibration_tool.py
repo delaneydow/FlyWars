@@ -19,6 +19,18 @@ USAGE:
   # Label only, no map build:
   python calibration_tool.py --images ./my_raw_images --json mirror_coordinates.json
 
+  # After building a map, review and re-label high-error images:
+  python calibration_tool.py --images ./my_raw_images --json mirror_coordinates.json \
+      --review-errors --map-out mirror_map.npz
+
+  # Review with a custom error threshold (default: 2.0 × median error):
+  python calibration_tool.py --images ./my_raw_images --json mirror_coordinates.json \
+      --review-errors --error-threshold 3.0 --map-out mirror_map.npz
+
+  # Review then rebuild the map with the corrected labels:
+  python calibration_tool.py --images ./my_raw_images --json mirror_coordinates.json \
+      --review-errors --build-map --map-out mirror_map.npz
+
 CONTROLS (during labeling):
   Left-click          : set centroid (green cross appears)
   Right-click / R     : reset centroid for this image
@@ -114,26 +126,164 @@ def parse_uv_from_filename(name: str):
 
 
 # ---------------------------------------------------------------------------
+# Per-sample error analysis
+# ---------------------------------------------------------------------------
+
+def compute_per_sample_errors(json_path: Path) -> list[dict]:
+    """
+    Fit a TPS model to all labelled samples and return per-sample reprojection
+    errors, sorted worst-first.
+
+    Each returned dict contains:
+        image       – filename
+        u, v        – mirror commands
+        centroid    – labelled [cx, cy]
+        predicted   – TPS-predicted [cx, cy]
+        error_px    – Euclidean reprojection error in pixels
+    """
+    with open(json_path, "r", encoding="utf-8-sig") as f:
+        data = json.load(f)
+
+    samples = [s for s in data["samples"] if "centroid" in s]
+    if len(samples) < 4:
+        raise ValueError(f"Need at least 4 labelled samples, found {len(samples)}")
+
+    uv = np.array([[s["u"], s["v"]] for s in samples], dtype=np.float64)
+    xy = np.array([s["centroid"]     for s in samples], dtype=np.float64)
+
+    # deduplicate (keep first occurrence so we can map back to samples)
+    seen = {}
+    dedup_idx = []
+    for i, key in enumerate(map(tuple, uv)):
+        if key not in seen:
+            seen[key] = i
+            dedup_idx.append(i)
+    uv_d = uv[dedup_idx]
+    xy_d = xy[dedup_idx]
+    samples_d = [samples[i] for i in dedup_idx]
+
+    uv_mean = uv_d.mean(axis=0)
+    uv_std  = uv_d.std(axis=0)
+    uvn = (uv_d - uv_mean) / uv_std
+    u_n, v_n = uvn[:, 0], uvn[:, 1]
+
+    fx = Rbf(u_n, v_n, xy_d[:, 0], function="thin_plate", smooth=1e-2)
+    fy = Rbf(u_n, v_n, xy_d[:, 1], function="thin_plate", smooth=1e-2)
+
+    pred_x = fx(u_n, v_n)
+    pred_y = fy(u_n, v_n)
+
+    results = []
+    for i, s in enumerate(samples_d):
+        err = float(np.hypot(pred_x[i] - xy_d[i, 0], pred_y[i] - xy_d[i, 1]))
+        results.append({
+            "image":     s["image"],
+            "u":         s["u"],
+            "v":         s["v"],
+            "centroid":  s["centroid"],
+            "predicted": [round(float(pred_x[i]), 1), round(float(pred_y[i]), 1)],
+            "error_px":  round(err, 2),
+        })
+
+    results.sort(key=lambda r: r["error_px"], reverse=True)
+    return results
+
+
+def print_error_report(errors: list[dict], threshold_px: float, images_dir: Path | None = None):
+    """
+    Pretty-print a per-sample error table and flag outliers.
+
+    Args:
+        errors:        Output of compute_per_sample_errors(), sorted worst-first.
+        threshold_px:  Errors >= this value are flagged as outliers.
+        images_dir:    If given, warn about flagged images that can't be found on disk.
+    """
+    all_errors = [r["error_px"] for r in errors]
+    median_err = float(np.median(all_errors))
+    mean_err   = float(np.mean(all_errors))
+    max_err    = float(np.max(all_errors))
+
+    outliers = [r for r in errors if r["error_px"] >= threshold_px]
+
+    print("\n" + "=" * 72)
+    print("  PER-SAMPLE REPROJECTION ERROR REPORT")
+    print("=" * 72)
+    print(f"  Samples:        {len(errors)}")
+    print(f"  Mean error:     {mean_err:.2f} px")
+    print(f"  Median error:   {median_err:.2f} px")
+    print(f"  Max error:      {max_err:.2f} px")
+    print(f"  Outlier cutoff: {threshold_px:.2f} px  ({len(outliers)} flagged)")
+    print("-" * 72)
+    print(f"  {'#':>3}  {'Image':<38}  {'u':>6} {'v':>6}  {'Error':>8}  Flag")
+    print("-" * 72)
+
+    for rank, r in enumerate(errors, 1):
+        flag = "  ◄ HIGH ERROR" if r["error_px"] >= threshold_px else ""
+        print(f"  {rank:>3}  {r['image']:<38}  {r['u']:>+6.3f} {r['v']:>+6.3f}"
+              f"  {r['error_px']:>7.2f}px{flag}")
+
+    print("=" * 72)
+
+    if outliers:
+        print(f"\n  {len(outliers)} image(s) with error ≥ {threshold_px:.2f}px:")
+        for r in outliers:
+            on_disk = ""
+            if images_dir is not None:
+                img_path = images_dir / r["image"]
+                if not img_path.exists():
+                    on_disk = "  [NOT FOUND ON DISK]"
+            print(f"    • {r['image']}  (error={r['error_px']:.2f}px,  "
+                  f"labelled={r['centroid']},  predicted={r['predicted']}){on_disk}")
+    else:
+        print("\n  No outliers found — all errors are below the threshold.")
+
+    print()
+
+
+# ---------------------------------------------------------------------------
 # Interactive centroid labeler
 # ---------------------------------------------------------------------------
 
 class CentroidLabeler:
     WINDOW = "Calibration Labeler  [click=centroid | S=save | B=back | Q=quit | scroll=zoom]"
 
-    def __init__(self, images_dir: Path, json_path: Path, raw_width=None, raw_height=None):
+    def __init__(self, images_dir: Path, json_path: Path,
+                 raw_width=None, raw_height=None,
+                 filter_names: list[str] | None = None):
+        """
+        Args:
+            filter_names: If given, only present images whose filename is in
+                          this list (used for error-review mode).
+        """
         self.images_dir = images_dir
         self.json_path = json_path
         self.raw_width = raw_width
         self.raw_height = raw_height
 
         self.data = self._load_json()
-        self.image_files = sorted(
+
+        all_files = sorted(
             [p for p in images_dir.iterdir()
              if p.suffix.lower() in (".raw", ".png", ".jpg", ".tiff", ".tif")],
             key=lambda p: p.name
         )
+
+        if filter_names is not None:
+            # Preserve the order supplied by filter_names (worst-first from error report)
+            name_to_path = {p.name: p for p in all_files}
+            self.image_files = [
+                name_to_path[n] for n in filter_names if n in name_to_path
+            ]
+            missing = [n for n in filter_names if n not in name_to_path]
+            if missing:
+                print(f"[WARN] {len(missing)} flagged image(s) not found in {images_dir}:")
+                for m in missing:
+                    print(f"       • {m}")
+        else:
+            self.image_files = all_files
+
         if not self.image_files:
-            print(f"[WARN] No images found in {images_dir}")
+            print(f"[WARN] No images to label in {images_dir}")
 
         # view state
         self._zoom = 1.0
@@ -190,7 +340,7 @@ class CentroidLabeler:
     # View helpers
     # ------------------------------------------------------------------
 
-    def _to_display(self, img: np.ndarray) -> np.ndarray:
+    def _to_display(self, img: np.ndarray, error_info: str | None = None) -> tuple:
         """Apply pan/zoom and render overlay."""
         h, w = img.shape
         # crop region in image coords
@@ -217,6 +367,30 @@ class CentroidLabeler:
             label = f"({cx:.1f}, {cy:.1f})"
             cv2.putText(vis, label, (sx + 18, sy - 10),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 0), 1)
+
+        # draw TPS-predicted centroid if available (orange cross)
+        if self._predicted is not None:
+            px_, py_ = self._predicted
+            sx = int((px_ - x0) / vw * disp_w)
+            sy = int((py_ - y0) / vh * disp_h)
+            cv2.drawMarker(vis, (sx, sy), (0, 165, 255),
+                           cv2.MARKER_TILTED_CROSS, 24, 2)
+            cv2.putText(vis, f"TPS ({px_:.1f}, {py_:.1f})",
+                        (sx + 18, sy + 18),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.50, (0, 165, 255), 1)
+
+        # draw line between predicted and labelled
+        if self._centroid is not None and self._predicted is not None:
+            cx, cy   = self._centroid
+            px_, py_ = self._predicted
+            s1 = (int((cx  - x0) / vw * disp_w), int((cy  - y0) / vh * disp_h))
+            s2 = (int((px_ - x0) / vw * disp_w), int((py_ - y0) / vh * disp_h))
+            cv2.line(vis, s1, s2, (0, 100, 255), 1, cv2.LINE_AA)
+
+        # error badge
+        if error_info:
+            cv2.putText(vis, error_info, (10, 55),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 100, 255), 2)
 
         return vis, (x0, y0, vw, vh, disp_w, disp_h)
 
@@ -280,7 +454,14 @@ class CentroidLabeler:
     # Main labeling loop
     # ------------------------------------------------------------------
 
-    def run(self):
+    def run(self, error_lookup: dict[str, dict] | None = None):
+        """
+        Args:
+            error_lookup: Optional dict mapping image filename → error record
+                          (from compute_per_sample_errors). When provided, the
+                          labeler shows the TPS-predicted centroid as an orange
+                          cross and displays the error in px as an overlay.
+        """
         cv2.namedWindow(self.WINDOW, cv2.WINDOW_NORMAL)
         cv2.resizeWindow(self.WINDOW, 1400, 1050)
 
@@ -292,7 +473,8 @@ class CentroidLabeler:
         files = self.image_files
         n = len(files)
 
-        print(f"\nFound {n} images in {self.images_dir}")
+        mode = "REVIEW (high-error)" if error_lookup else "LABEL"
+        print(f"\nFound {n} images to {mode} in {self.images_dir}")
         print("Controls: click=centroid | S/Enter=save+next | B=back | R=reset | Z=zoom-fit | Q=quit\n")
 
         while 0 <= i < n:
@@ -318,12 +500,20 @@ class CentroidLabeler:
             else:
                 self._centroid = None
 
+            # error overlay data
+            err_record = (error_lookup or {}).get(img_path.name)
+            self._predicted = tuple(err_record["predicted"]) if err_record else None
+            error_info = (f"TPS error: {err_record['error_px']:.2f}px  "
+                          f"(green=labelled  orange=TPS predicted)"
+                          if err_record else None)
+
             self._reset_view()
             status = "existing" if existing else "new"
-            print(f"[{i+1}/{n}] {img_path.name}  u={u:+.3f} v={v:+.3f}  [{status}]")
+            err_str = f"  error={err_record['error_px']:.2f}px" if err_record else ""
+            print(f"[{i+1}/{n}] {img_path.name}  u={u:+.3f} v={v:+.3f}  [{status}]{err_str}")
 
             while True:
-                vis, vp = self._to_display(self._img)
+                vis, vp = self._to_display(self._img, error_info=error_info)
                 view_ref[0] = vp
 
                 # HUD
@@ -536,6 +726,103 @@ def build_mirror_map(json_path: Path, out_path: Path, grid_res: int = 200):
     print(f"  Grid points in map: {n_safe}")
 
 
+def diagnose_uv_monotonicity(json_path: Path, u_axis_tolerance: float = 0.005):
+    """
+    Check for physically implausible samples: cases where sorting by u (or v)
+    produces non-monotonic pixel centroid motion, which strongly suggests a
+    mislabeled image or a filename/capture mismatch.
+
+    Prints warnings for any violations found.
+    """
+    with open(json_path, "r", encoding="utf-8-sig") as f:
+        data = json.load(f)
+
+    samples = [s for s in data["samples"] if "centroid" in s]
+
+    print("\n" + "=" * 72)
+    print("  MONOTONICITY / CONSISTENCY DIAGNOSTIC")
+    print("=" * 72)
+
+    # ── 1. Check u-slices: for fixed v, does x decrease as u increases? ──
+    # Group samples by v (within tolerance)
+    from itertools import groupby
+
+    def round_v(s): return round(s["v"] / u_axis_tolerance) * u_axis_tolerance
+
+    by_v = {}
+    for s in samples:
+        key = round(s["v"] / u_axis_tolerance) * u_axis_tolerance
+        by_v.setdefault(key, []).append(s)
+
+    violations_found = 0
+    for v_key, group in sorted(by_v.items()):
+        if len(group) < 2:
+            continue
+        group_sorted = sorted(group, key=lambda s: s["u"])
+        print(f"\n  v ≈ {v_key:+.3f}  ({len(group)} samples, sorted by u):")
+        prev = None
+        for s in group_sorted:
+            cx, cy = s["centroid"]
+            flag = ""
+            if prev is not None:
+                du = s["u"] - prev["u"]
+                dcx = cx - prev["centroid"][0]
+                # u more positive → beam moves left → cx should decrease
+                # (flip sign if your mirror convention is opposite)
+                if du > 0 and dcx > 10:
+                    flag = "  ◄◄ SUSPICIOUS: u↑ but cx↑ too"
+                    violations_found += 1
+                elif du > 0 and dcx < -200:
+                    flag = "  ◄◄ SUSPICIOUS: implausibly large jump"
+                    violations_found += 1
+                elif du < 0 and dcx < -10:
+                    flag = "  ◄◄ SUSPICIOUS: u↓ but cx↓ too"
+                    violations_found += 1
+            print(f"    u={s['u']:+.4f}  cx={cx:7.1f}  cy={cy:7.1f}  {s['image']}{flag}")
+            prev = s
+
+    # ── 2. Duplicate centroid check ───────────────────────────────────────
+    print(f"\n  Duplicate / near-duplicate centroid check (within 5px):")
+    dup_found = False
+    for i, a in enumerate(samples):
+        for j, b in enumerate(samples):
+            if j <= i:
+                continue
+            dist = math.hypot(a["centroid"][0] - b["centroid"][0],
+                              a["centroid"][1] - b["centroid"][1])
+            if dist < 5.0 and (a["u"] != b["u"] or a["v"] != b["v"]):
+                print(f"    ◄◄ NEAR-DUPLICATE centroids ({dist:.1f}px apart):")
+                print(f"       {a['image']}  u={a['u']:+.4f} v={a['v']:+.4f}  → {a['centroid']}")
+                print(f"       {b['image']}  u={b['u']:+.4f} v={b['v']:+.4f}  → {b['centroid']}")
+                dup_found = True
+    if not dup_found:
+        print("    No near-duplicate centroids found.")
+
+    # ── 3. Neighbor distance outliers ─────────────────────────────────────
+    print(f"\n  Neighbor-distance outlier check:")
+    print(f"  (for each sample, expected px-per-unit-u/v from global linear fit)")
+    uv_arr = np.array([[s["u"], s["v"]] for s in samples])
+    xy_arr = np.array([s["centroid"]     for s in samples])
+    # simple least-squares affine fit: [cx, cy] = A @ [u, v, 1]
+    A_mat = np.column_stack([uv_arr, np.ones(len(samples))])
+    coeffs, _, _, _ = np.linalg.lstsq(A_mat, xy_arr, rcond=None)
+    pred_linear = A_mat @ coeffs
+    linear_errs = np.linalg.norm(xy_arr - pred_linear, axis=1)
+    median_lin  = float(np.median(linear_errs))
+    print(f"  Linear-fit median residual: {median_lin:.1f}px")
+    for s, err in sorted(zip(samples, linear_errs), key=lambda x: -x[1]):
+        flag = "  ◄◄ HIGH" if err > 3 * median_lin else ""
+        if err > 2 * median_lin or flag:
+            print(f"    {s['image']:<42}  linear_err={err:6.1f}px{flag}")
+
+    print("\n" + "=" * 72)
+    if violations_found == 0:
+        print("  No monotonicity violations found.")
+    else:
+        print(f"  {violations_found} monotonicity violation(s) found — review flagged images above.")
+    print("=" * 72 + "\n")
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -558,9 +845,86 @@ def main():
                     help="Height of .raw images in pixels (auto-detected if omitted)")
     ap.add_argument("--grid-res",    type=int, default=200,
                     help="Dense grid resolution for inverse map (default 200)")
+
+    # ── error review ──────────────────────────────────────────────────────
+    ap.add_argument("--review-errors", action="store_true",
+                    help=(
+                        "Compute per-sample TPS reprojection errors, print a ranked "
+                        "report, then open the interactive labeler for any image whose "
+                        "error exceeds --error-threshold.  Requires --images and --json."
+                    ))
+    ap.add_argument("--error-threshold", type=float, default=None,
+                    metavar="MULTIPLIER",
+                    help=(
+                        "Flag samples whose error >= MULTIPLIER × median error. "
+                        "Pass a raw pixel value with --error-threshold-px instead. "
+                        "Default: 2.0 × median."
+                    ))
+    ap.add_argument("--error-threshold-px", type=float, default=None,
+                    metavar="PIXELS",
+                    help=(
+                        "Flag samples whose error >= this absolute pixel value. "
+                        "Overrides --error-threshold if both are given."
+                    ))
+    ap.add_argument("--report-only", action="store_true",
+                    help=(
+                        "With --review-errors: print the error report but do NOT "
+                        "open the interactive labeler (useful for a quick audit)."
+                    ))
+
     args = ap.parse_args()
 
-    # --- label ---
+    # ── validate ──────────────────────────────────────────────────────────
+    if args.review_errors and not args.json.exists():
+        ap.error(f"--review-errors requires an existing JSON file: {args.json}")
+
+    # ── error review mode ─────────────────────────────────────────────────
+    if args.review_errors:
+        print(f"\nComputing per-sample reprojection errors from {args.json} …")
+        errors = compute_per_sample_errors(args.json)
+
+        # determine threshold in pixels
+        all_errs = [r["error_px"] for r in errors]
+        median_err = float(np.median(all_errs))
+
+        if args.error_threshold_px is not None:
+            threshold_px = args.error_threshold_px
+        elif args.error_threshold is not None:
+            threshold_px = args.error_threshold * median_err
+        else:
+            threshold_px = 2.0 * median_err   # sensible default
+
+        print_error_report(errors, threshold_px=threshold_px,
+                           images_dir=args.images)
+
+        if not args.report_only:
+            outlier_names = [r["image"] for r in errors if r["error_px"] >= threshold_px]
+            if not outlier_names:
+                print("No outliers to review — nothing to re-label.")
+            else:
+                if args.images is None:
+                    ap.error("--images is required to open the interactive labeler")
+                if not args.images.is_dir():
+                    ap.error(f"--images path is not a directory: {args.images}")
+
+                print(f"Opening labeler for {len(outlier_names)} high-error image(s) …\n")
+                error_lookup = {r["image"]: r for r in errors}
+                labeler = CentroidLabeler(
+                    args.images, args.json,
+                    raw_width=args.raw_width,
+                    raw_height=args.raw_height,
+                    filter_names=outlier_names,
+                )
+                labeler.run(error_lookup=error_lookup)
+
+        # fall through to --build-map if requested
+        if args.build_map:
+            print(f"\nRebuilding mirror map from {args.json} …")
+            build_mirror_map(args.json, args.map_out, grid_res=args.grid_res)
+            print("Done.")
+        return
+
+    # ── normal label mode ─────────────────────────────────────────────────
     if not args.skip_label:
         if args.images is None:
             ap.error("--images is required unless --skip-label is set")
