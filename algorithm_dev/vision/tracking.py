@@ -9,6 +9,7 @@
 import cv2
 import time
 from algorithm_dev.vision.state import classify_state
+from algorithm_dev.vision.fire_suppression import *
 from algorithm_dev.vision.tracking_helper import *
 
 
@@ -17,7 +18,9 @@ from algorithm_dev.vision.tracking_helper import *
 
 # === MAIN PROCESSING LOOP ===
 
-def process_video(camera, display=False): 
+def process_video(camera, suppression = None, display=False): 
+    """ suppression: optional FireSuppression instance. Skip blob detection and freezes new track creation
+    so that laser flash frames are ignored. """
     print(f"beginning...\n") 
 
     
@@ -69,8 +72,32 @@ def process_video(camera, display=False):
                 #print(f"[VISION preprocess failed: {e}")
                 import traceback; traceback.print_exc()
                 continue
+
+            # === ADD SUPPRESSION GATING ===
+            suppressed = suppression.tick() if suppression is not None else False
+            
+            if suppressed:
+                # keep kalman filters alive via predict-only; skip all blob detections
+                # existing tracks coast on velocity estimate
+                for t in tracks:
+                    t.predict(dt)
+                    t.missed += 1 # count missed to stale tracks still expire
+                tracks = [t for t in tracks if t.missed <= MAX_MISSED]
+                prev_gray = curr_gray
+                frame_idx += 1
+                # still yield so control loop doesn't stall
+                yield {
+                    "frame": frame_idx,
+                    "tracks": tracks,
+                    "states": track_states,
+                    "vision_latency_ms": (time.perf_counter() - vision_start) * 1000,
+                    "detections": 0,
+                    "suppressed": True,
+                    "timestamp": time.perf_counter()
+                }
+                continue
     
-            # Moving detection
+            # Moving detection (no suppression)
             try:
 
                 detections, _ = detect_moving_objects_fast(prev_gray, curr_gray)
@@ -120,6 +147,7 @@ def process_video(camera, display=False):
                     "states": track_states,
                     "vision_latency_ms": vision_latency_ms,
                     "detections": len(detections),
+                    "suppressed": False, #TODO update Writer to accept new field
                     "timestamp": time.perf_counter()
                 }
             except GeneratorExit:
