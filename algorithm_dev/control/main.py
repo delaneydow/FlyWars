@@ -9,6 +9,7 @@ from algorithm_dev.control.object_scoring import SPOT_RADIUS_PX_SAFE
 
 # import Tracking pipeline
 from algorithm_dev.vision.tracking import process_video
+from algorithm_dev.vision.fire_suppression import FireSuppression
 from algorithm_dev.control.laser_interface import LaserInterface
 from algorithm_dev.control.mirror_planner import MirrorPlanner
 from algorithm_dev.Writer import Writer
@@ -97,6 +98,10 @@ def main():
 
     # writing set up
     writer = Writer()
+
+    # Create shared suppression state 
+    # may need to tune suppress_frames instance if ghost tracks still occur after firing 
+    suppression = FireSuppression(suppress_frames = 8)
   
     # === CALL VISION LOOP ===
     last_packet_time = time.perf_counter()
@@ -134,7 +139,8 @@ def main():
                                 packet["states"],
                                 packet["frame"],
                                 laser,
-                                mirror)
+                                mirror,
+                                suppression = suppression)
                 last_packet_time = time.perf_counter() #reset watchdog after blocking fire
 
                 #CPU / thermal monitoring (from cooldown.py)
@@ -155,7 +161,8 @@ def main():
                     "ndet": packet["detections"],
                     "ntrack": len(packet["tracks"]),
                     "temp": cpu_temp,
-                    "cooldown": cooldown
+                    "cooldown": cooldown, 
+                     "suppressed": packet.get("suppressed", False)
                 })
 
                 writer.log_fire(result)

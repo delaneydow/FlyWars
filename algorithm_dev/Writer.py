@@ -1,24 +1,31 @@
 ﻿import numpy as np
+import os
+from datetime import datetime
 
 class Writer:
-    def __init__(self): 
+    def __init__(self, output_dir = "runs"): 
 
-        self.frame_file = open("frames.csv", "w", buffering=1)
-        self.track_file = open("tracks.csv", "w", buffering=1)
-        self.fire_file = open("fires.csv", "w", buffering=1)
+        # create one folder per fun 
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        self.run_dir = os.pathjoin(output_dir, timestamp)
+        os.makedirs(self.run_dir, exist_ok=True)
 
+        # create files for each run
+        self.frame_file = open(os.path.join(self.run_dir, "frames.csv"), "w", buffering=1)
+        self.track_file = open(os.path.join(self.run_dir, "tracks.csv"), "w", buffering=1)
+        self.fire_file  = open(os.path.join(self.run_dir, "fires.csv"),  "w", buffering=1)
 
-        self.frame_file.write("frame,time,vision_latency_ms,pipeline_latency_ms,ndet,ntrack,temp,cooldown\n")
-
+        # create headers for each file
+        self.frame_file.write("frame,time,vision_latency_ms,pipeline_latency_ms,ndet,ntrack,temp,cooldown,suppressed\n")
         self.track_file.write("frame,track,x,y,vx,vy,speed,state,cov\n")
-
-        self.fire_file.write("frame,track,score,x,y\n")
+        self.fire_file.write("frame,track,score,x,y,hit_time,hit_confirmed,redirects\n")
 
     def log_frame(self, f):
             self.frame_file.write(
                 f"{f['frame']},{f['time']},{f['vision_latency_ms']}, {f['pipeline_latency_ms']},"
                 f"{f['ndet']},{f['ntrack']},"
-                f"{f['temp']},{f['cooldown']}\n"
+                f"{f['temp']},{f['cooldown']},"
+                f"{int(f.get('suppressed', False))}\n"
             )
     def log_fire(self, result):
         if not result:

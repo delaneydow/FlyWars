@@ -83,7 +83,7 @@ def fire_with_tracking(laser, mirror, cmd, tracks, track_states):
     }
 
 
-def control_step(tracks, track_states, frame_idx, laser, mirror):
+def control_step(tracks, track_states, frame_idx, laser, mirror, suppression=None):
     global beam_position
 
     if DEBUG_CNTRL:
@@ -121,6 +121,11 @@ def control_step(tracks, track_states, frame_idx, laser, mirror):
     t_start = time.perf_counter()
     hit_result = fire_with_tracking(laser, mirror, cmd, tracks, track_states)
     t_end = time.perf_counter()
+    # === TRIGGER SUPPRESSION IMMEDIATELY AFTER FIRE ===
+    if suppression is not None:
+        # supppress_frames covers laser flash duration + mirror setttling 
+        fire_frames = int((MIN_HIT_TIME_MS / 1000) * 120) + 4 # +4 frames settling
+        suppression.trigger(frames=fire_frames)
     if DEBUG_CNTRL:
         print(f"[FIRE] laser fired for {(t_end-t_start)*1000:.1f}ms")
 
