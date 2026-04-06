@@ -8,7 +8,7 @@ from algorithm_dev.control.object_scoring import SPOT_RADIUS_PX_SAFE, PREDICT_HO
 # constants
 beam_position = np.array([989.6, 620.2])  # initialized once, taken from 0,0 origin of mirror/beam centroid 
 
-DEBUG_CNTRL = False  # set True only when debugging
+DEBUG_CNTRL = True  # set True only when debugging
 DEBUG_SCORE = False
 
 HIT_VERIFY_INTERVAL = 0.010  # check every 10ms during fire
@@ -38,7 +38,7 @@ def fire_with_tracking(laser, mirror, cmd, tracks, track_states):
 
 
     # loop redirects laser or aborts -- duration is job of MCU
-    while time.perf_counter() - fire_start < (MIN_HIT_TIME_MS / 1000) * 4:
+    """while time.perf_counter() - fire_start < (MIN_HIT_TIME_MS / 1000) * 4:
         now = time.perf_counter()
         elapsed = now - fire_start
 
@@ -49,6 +49,8 @@ def fire_with_tracking(laser, mirror, cmd, tracks, track_states):
                 break # MCU finished its time window
 
         if elapsed < (MIN_HIT_TIME_MS / 1000): #still within expected window
+            if DEBUG_CNTRL:
+                print(f"[REDIRECT")
             target = next((t for t in tracks if t.id == target_id), None)
             if target is None: 
                 laser.ser.write(b"OFF\n")
@@ -69,8 +71,10 @@ def fire_with_tracking(laser, mirror, cmd, tracks, track_states):
                 redirect_count += 1
                 #print(f"[FIRE] redirecting, dist={dist:.1f}px")
 
-        time.sleep(HIT_VERIFY_INTERVAL)
+        time.sleep(HIT_VERIFY_INTERVAL)"""
 
+    time.sleep(0.250)
+    time.sleep(HIT_VERIFY_INTERVAL)
     laser.ready = True
     total = time.perf_counter() - fire_start
 

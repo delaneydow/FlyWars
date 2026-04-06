@@ -67,7 +67,7 @@ def plan_targets(tracks, track_states, beam_position, frame_idx):
         # add redundant points if high uncertainty 
         cov_trace = np.trace(track.kf.errorCovPost)
 
-        redundancy = 3 if cov_trace > MAX_COV_THRESHOLD * 0.8 else 1
+        redundancy = 3 if cov_trace > MAX_COV_THRESHOLD * 0.8 else 1 #change from 3 points
 
         for _ in range(redundancy): 
             # small random jitter within spot radius
