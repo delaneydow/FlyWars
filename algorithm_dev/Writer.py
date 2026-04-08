@@ -7,7 +7,7 @@ class Writer:
 
         # create one folder per fun 
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        self.run_dir = os.pathjoin(output_dir, timestamp)
+        self.run_dir = os.path.join(output_dir, timestamp)
         os.makedirs(self.run_dir, exist_ok=True)
 
         # create files for each run
