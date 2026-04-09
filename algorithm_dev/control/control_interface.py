@@ -14,12 +14,22 @@ DEBUG_SCORE = False
 HIT_VERIFY_INTERVAL = 0.010  # check every 10ms during fire
 MIN_HIT_TIME_MS = 250          # required hit duration (ms)
 
+# prepare inter-frame cooldown states
+_last_fired = {}
+INTER_FIRE_COOLDOWN_S = 0.250 # in seconds, minimum time before firing at same track ID (CAN TUNE THIS)
+
+
 def fire_with_tracking(laser, mirror, cmd, tracks, track_states):
     """Fire laser while verifying beam stays on target for MIN_HIT_TIME."""
 
     target_id = cmd["track_id"]
     u, v = mirror.find_uv_for_xy(*cmd["aim"])
     mirror.send_uv(u, v) # blocks until settled - safe to fire immediately after
+
+    # defensive reset before firing to clear any stuck MCU timer state
+    laser.ser.write(b"OFF\n")
+    laser.ser.flush()
+    #time.sleep(0.010)  # can potentially include (would add extra latency)
 
     # start firing
     laser.ser.write(f"FIRE {MIN_HIT_TIME_MS}\n".encode()) #send timed fire command - MCU owns time keeping for 250 ms
@@ -74,7 +84,7 @@ def fire_with_tracking(laser, mirror, cmd, tracks, track_states):
         time.sleep(HIT_VERIFY_INTERVAL)"""
 
     time.sleep(0.250)
-    time.sleep(HIT_VERIFY_INTERVAL)
+    #time.sleep(HIT_VERIFY_INTERVAL)
     laser.ready = True
     total = time.perf_counter() - fire_start
 
@@ -117,11 +127,19 @@ def control_step(tracks, track_states, frame_idx, laser, mirror, suppression=Non
 
     # fire laser on highest-priority ranked target, first planned shot per frame
     cmd = plan[0] #highest priority target 
-    #u, v = mirror.find_uv_for_xy(*cmd["aim"]) #compute u & v
-    #mirror.send_uv(u, v) # use local u, v
+    track_id = cmd["track_id"]
+
+    # cooldown guard  -- don't refire at same track within cooldown window 
+    now = time.perf_counter()
+    last = _last_fired.get(track_id, 0)
+    if now - last < INTER_FIRE_COOLDOWN_S:
+        if DEBUG_CNTRL:
+            print(f"[CONTROL] track {track_id} in cooldown, skipping")
+        return None
+
     if DEBUG_CNTRL:
         print(f"[FIRE] track={cmd['track_id']} aim={cmd['aim']}")
-    #laser.fire()
+   
     t_start = time.perf_counter()
     hit_result = fire_with_tracking(laser, mirror, cmd, tracks, track_states)
     t_end = time.perf_counter()

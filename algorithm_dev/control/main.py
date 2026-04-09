@@ -109,7 +109,7 @@ def main():
     
     try: 
         print("[SYSTEM] Starting vision loop...")
-        for packet in process_video(cam, display=False): 
+        for packet in process_video(cam, suppression=suppression, display=False): 
 
             try: 
 
