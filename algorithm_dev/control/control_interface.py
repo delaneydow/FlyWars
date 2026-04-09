@@ -137,6 +137,10 @@ def control_step(tracks, track_states, frame_idx, laser, mirror, suppression=Non
             print(f"[CONTROL] track {track_id} in cooldown, skipping")
         return None
 
+    # add temporarily to control_step, just after the cooldown check:
+    if DEBUG_CNTRL:
+        print(f"[COOLDOWN] track={track_id} last_fired={_last_fired.get(track_id, 0):.3f} now={now:.3f} delta={now - _last_fired.get(track_id, 0):.3f}s")
+
     if DEBUG_CNTRL:
         print(f"[FIRE] track={cmd['track_id']} aim={cmd['aim']}")
    

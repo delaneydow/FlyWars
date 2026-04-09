@@ -2,6 +2,7 @@
 import time
 import signal
 import sys
+import cv2, os
 
 from algorithm_dev.control.control_interface import control_step
 from algorithm_dev.control.cooldown import get_cpu_temp, adaptive_cooldown
@@ -135,12 +136,23 @@ def main():
 
                 # CONTROL STEP 
                 pipeline_start = packet["timestamp"] # starting time 
-                result = control_step(packet["tracks"],
-                                packet["states"],
-                                packet["frame"],
-                                laser,
-                                mirror,
-                                suppression = suppression)
+                if not packet.get("suppressed", False):
+
+                    result = control_step(packet["tracks"],
+                                    packet["states"],
+                                    packet["frame"],
+                                    laser,
+                                    mirror,
+                                    suppression = suppression)
+                    # save fire frame for back-reflection debugging
+                    if result and result.get("fired"): 
+                        fire_dir = os.path.join(writer.run_dir, "fire_frames")
+                        os.makedirs(fire_dir, exist_ok=True)
+                        cv2.imwrite(
+                                os.path.join(fire_dir, f"frame_{packet['frame']:06d}_track{result['track_id']}.png"),packet.get("raw_frame"))
+                else:
+                    result = None
+
                 last_packet_time = time.perf_counter() #reset watchdog after blocking fire
 
                 #CPU / thermal monitoring (from cooldown.py)
