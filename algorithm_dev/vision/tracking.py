@@ -93,8 +93,7 @@ def process_video(camera, suppression = None, display=False):
                     "vision_latency_ms": (time.perf_counter() - vision_start) * 1000,
                     "detections": 0,
                     "suppressed": True,
-                    "timestamp": time.perf_counter(), 
-                    "raw_frame": curr_gray #TODO remove after debugging
+                    "timestamp": time.perf_counter()
                 }
                 continue
     
@@ -149,8 +148,7 @@ def process_video(camera, suppression = None, display=False):
                     "vision_latency_ms": vision_latency_ms,
                     "detections": len(detections),
                     "suppressed": False,
-                    "timestamp": time.perf_counter(),
-                    "raw_frame": curr_gray # TODO remove after debugging
+                    "timestamp": time.perf_counter()
                 }
             except GeneratorExit:
                 print("[VISION] GeneratorExit -- caller closed the generator")

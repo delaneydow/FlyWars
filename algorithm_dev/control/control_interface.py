@@ -8,7 +8,7 @@ from algorithm_dev.control.object_scoring import SPOT_RADIUS_PX_SAFE, PREDICT_HO
 # constants
 beam_position = np.array([989.6, 620.2])  # initialized once, taken from 0,0 origin of mirror/beam centroid 
 
-DEBUG_CNTRL = True  # set True only when debugging
+DEBUG_CNTRL = False  # set True only when debugging
 DEBUG_SCORE = False
 
 HIT_VERIFY_INTERVAL = 0.010  # check every 10ms during fire
@@ -37,7 +37,7 @@ def fire_with_tracking(laser, mirror, cmd, tracks, track_states):
 
     #read MCU ack 
     try:
-        laser.ser.readline().decode().strip()
+        laser.ser.readline().decode().strip() # returns "OK"
     except Exception:
         pass
 
@@ -82,8 +82,16 @@ def fire_with_tracking(laser, mirror, cmd, tracks, track_states):
                 #print(f"[FIRE] redirecting, dist={dist:.1f}px")
 
         time.sleep(HIT_VERIFY_INTERVAL)"""
-
-    time.sleep(0.250)
+    # wait for DONE instead of sleeping blindly 
+    #timeout 2x expected fire time as a safety net
+    deadline = fire_start + (MIN_HIT_TIME_MS / 1000) * 2
+    while time.perf_counter() < deadline: 
+        if laser.ser.in_waiting:
+            msg = laser.ser.readline().decode().strip()
+            if msg == "DONE":
+                break
+        time.sleep(0.005) #5ms poll - low CPU, low latency
+    #time.sleep(0.250)
     #time.sleep(HIT_VERIFY_INTERVAL)
     laser.ready = True
     total = time.perf_counter() - fire_start
@@ -93,7 +101,7 @@ def fire_with_tracking(laser, mirror, cmd, tracks, track_states):
         "confirmed": not aborted,
         "hit_time": round(min(total, MIN_HIT_TIME_MS / 1000), 3),
         "total_time": round(total, 3),
-        "redirects": redirect_count,
+        "redirects": 0, #redirect_count,
     }
 
 
@@ -139,13 +147,14 @@ def control_step(tracks, track_states, frame_idx, laser, mirror, suppression=Non
 
     # add temporarily to control_step, just after the cooldown check:
     if DEBUG_CNTRL:
-        print(f"[COOLDOWN] track={track_id} last_fired={_last_fired.get(track_id, 0):.3f} now={now:.3f} delta={now - _last_fired.get(track_id, 0):.3f}s")
+       print(f"[COOLDOWN] track={track_id} last_fired={_last_fired.get(track_id, 0):.3f} now={now:.3f} delta={now - _last_fired.get(track_id, 0):.3f}s")
 
     if DEBUG_CNTRL:
         print(f"[FIRE] track={cmd['track_id']} aim={cmd['aim']}")
    
     t_start = time.perf_counter()
     hit_result = fire_with_tracking(laser, mirror, cmd, tracks, track_states)
+    _last_fired[track_id] = time.perf_counter() # record AFTER fire completes
     t_end = time.perf_counter()
     # === TRIGGER SUPPRESSION IMMEDIATELY AFTER FIRE ===
     if suppression is not None:

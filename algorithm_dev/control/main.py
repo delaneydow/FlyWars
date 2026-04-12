@@ -145,11 +145,11 @@ def main():
                                     mirror,
                                     suppression = suppression)
                     # save fire frame for back-reflection debugging
-                    if result and result.get("fired"): 
-                        fire_dir = os.path.join(writer.run_dir, "fire_frames")
-                        os.makedirs(fire_dir, exist_ok=True)
-                        cv2.imwrite(
-                                os.path.join(fire_dir, f"frame_{packet['frame']:06d}_track{result['track_id']}.png"),packet.get("raw_frame"))
+                    #if result and result.get("fired"): 
+                      #  fire_dir = os.path.join(writer.run_dir, "fire_frames")
+                       # os.makedirs(fire_dir, exist_ok=True)
+                        #cv2.imwrite(
+                         #       os.path.join(fire_dir, f"frame_{packet['frame']:06d}_track{result['track_id']}.png"),packet.get("raw_frame"))
                 else:
                     result = None
 
@@ -174,7 +174,7 @@ def main():
                     "ntrack": len(packet["tracks"]),
                     "temp": cpu_temp,
                     "cooldown": cooldown, 
-                     "suppressed": packet.get("suppressed", False)
+                    "suppressed": packet.get("suppressed", False)
                 })
 
                 writer.log_fire(result)
