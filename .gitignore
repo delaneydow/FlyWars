@@ -52,3 +52,7 @@ data_analysis/train.txt
 figures/data/advanced_metrics.csv
 figures/data/all_simulations.csv
 figures/data/summary_metrics.csv
+laser_energy_density_publication.pdf
+laser_energy_density_publication.png
+mirror_repeatability_publication.pdf
+mirror_repeatability_publication.png
