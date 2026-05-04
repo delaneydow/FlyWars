@@ -56,3 +56,13 @@ laser_energy_density_publication.pdf
 laser_energy_density_publication.png
 mirror_repeatability_publication.pdf
 mirror_repeatability_publication.png
+calibration_figure.png
+calibration_figure_fov.png
+calibration_figure_fov_1.png
+calibration_figure_residuals.png
+calibration_figure_residuals_1.png
+calibration_figure_rms.png
+calibration_figure_rms_1.png
+data_analysis/data.yaml
+data_analysis/fly_annotations.zip
+data_analysis/fly_data_analysis.py
